@@ -1,0 +1,44 @@
+name: Burrow
+packages:
+  BurrowPackage:
+    path: .
+targets:
+  BurrowApp:
+    type: application
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - Sources/Burrow
+      - path: Resources/Burrow.icon
+        type: file
+        buildPhase: resources
+      - path: Resources/Credits.rtf
+        buildPhase: resources
+      - path: LICENSE
+        buildPhase: resources
+      - path: NOTICE
+        buildPhase: resources
+    dependencies:
+      - package: BurrowPackage
+        product: BurrowCore
+    settings:
+      base:
+        PRODUCT_NAME: Burrow
+        PRODUCT_BUNDLE_IDENTIFIER: com.mariusfanu.burrow
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: Burrow
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_KEY_NSPrincipalClass: NSApplication
+        INFOPLIST_KEY_NSSupportsAutomaticTermination: NO
+schemes:
+  Burrow App:
+    build:
+      targets:
+        BurrowApp: all
+    archive:
+      config: Release

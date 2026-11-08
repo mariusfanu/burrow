@@ -1,0 +1,105 @@
+{
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "srgb:0.580,0.760,0.930,1",
+          "srgb:0.730,0.700,0.860,1"
+        ],
+        "orientation": {
+          "start": { "x": 0.5, "y": 0 },
+          "stop": { "x": 0.5, "y": 1 }
+        }
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
+          "srgb:0.145,0.255,0.420,1",
+          "srgb:0.200,0.175,0.340,1"
+        ],
+        "orientation": {
+          "start": { "x": 0.5, "y": 0 },
+          "stop": { "x": 0.5, "y": 1 }
+        }
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "arches",
+      "lighting": "individual",
+      "layers": [
+        {
+          "glass": true,
+          "hidden": false,
+          "image-name": "arch-mouth.svg",
+          "name": "arch-mouth",
+          "opacity": 1,
+          "fill-specializations": [
+            {
+              "value": { "solid": "srgb:0.071,0.145,0.255,1" }
+            },
+            {
+              "appearance": "dark",
+              "value": { "solid": "srgb:0.040,0.085,0.160,1" }
+            }
+          ]
+        },
+        {
+          "glass": true,
+          "hidden": false,
+          "image-name": "arch-inner.svg",
+          "name": "arch-inner",
+          "opacity": 1,
+          "fill-specializations": [
+            {
+              "value": { "solid": "srgb:0.220,0.400,0.650,1" }
+            },
+            {
+              "appearance": "dark",
+              "value": { "solid": "srgb:0.145,0.290,0.480,1" }
+            }
+          ]
+        },
+        {
+          "glass": true,
+          "hidden": false,
+          "image-name": "arch-middle.svg",
+          "name": "arch-middle",
+          "opacity": 1,
+          "fill-specializations": [
+            {
+              "value": { "solid": "srgb:0.420,0.580,0.770,1" }
+            },
+            {
+              "appearance": "dark",
+              "value": { "solid": "srgb:0.270,0.410,0.600,1" }
+            }
+          ]
+        },
+        {
+          "glass": true,
+          "hidden": false,
+          "image-name": "arch-outer.svg",
+          "name": "arch-outer",
+          "opacity": 1,
+          "fill-specializations": [
+            {
+              "value": { "solid": "srgb:0.655,0.765,0.890,1" }
+            },
+            {
+              "appearance": "dark",
+              "value": { "solid": "srgb:0.430,0.560,0.730,1" }
+            }
+          ]
+        }
+      ],
+      "shadow": { "kind": "neutral", "opacity": 0.4 },
+      "specular": true,
+      "translucency": { "enabled": false, "value": 0 }
+    }
+  ],
+  "supported-platforms": { "squares": "shared" }
+}

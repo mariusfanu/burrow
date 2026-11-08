@@ -1,0 +1,27 @@
+Burrow is an independent, unofficial front end for the Mole CLI.
+It isn't affiliated with or endorsed by the Mole project or its author.
+"Mole" is a trademark of the Mole project and is used here only to name the
+command-line tool that Burrow runs.
+
+Burrow: https://burrow.mariusfanu.com
+Copyright (c) 2026 Marius Fanu (https://mariusfanu.com)
+
+Mole: https://github.com/tw93/Mole
+Copyright (c) the Mole contributors. Licensed under GPL-3.0.
+
+These Burrow files contain code adapted from Mole and translated from Go to
+Swift on 5 November 2026. They keep the upstream license:
+
+  Sources/BurrowCore/Safety/TrashGuard.swift
+    from cmd/analyze/delete.go (validateTrashTarget and helpers)
+    https://github.com/tw93/Mole/blob/96df944135b604f1eeb1a314c91f63f340e37737/cmd/analyze/delete.go
+
+  Sources/BurrowCore/Safety/OperationsLog.swift
+    from cmd/analyze/oplog.go (operations.log and deletions.log formats)
+    https://github.com/tw93/Mole/blob/96df944135b604f1eeb1a314c91f63f340e37737/cmd/analyze/oplog.go
+
+  Tests/BurrowCoreTests/SafetyTests.swift
+    TrashGuardTests mirrors cases from cmd/analyze/delete_test.go
+    https://github.com/tw93/Mole/blob/96df944135b604f1eeb1a314c91f63f340e37737/cmd/analyze/delete_test.go
+
+Burrow as a whole is distributed under GPL-3.0. See LICENSE.

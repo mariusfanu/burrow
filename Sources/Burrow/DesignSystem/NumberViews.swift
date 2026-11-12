@@ -61,6 +61,13 @@ struct LevelBar: View {
     }
 }
 
+extension LevelBar {
+    /// A bar showing `part` as a share of `whole`, empty when there's no whole to compare with.
+    init(part: Int64, of whole: Int64, tint: Color = .accentColor, height: CGFloat = 6) {
+        self.init(fraction: whole > 0 ? Double(part) / Double(whole) : 0, tint: tint, height: height)
+    }
+}
+
 /// A ring that draws itself to its value.
 struct RingGauge<Label: View>: View {
     let fraction: Double

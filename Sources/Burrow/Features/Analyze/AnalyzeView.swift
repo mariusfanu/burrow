@@ -298,7 +298,8 @@ private struct EntryRow: View {
                     }
                 }
                 LevelBar(
-                    fraction: total > 0 ? Double(entry.size) / Double(total) : 0,
+                    part: entry.size,
+                    of: total,
                     tint: Color(hex: tint),
                     height: 3
                 )

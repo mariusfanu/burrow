@@ -219,7 +219,7 @@ private struct CleanSectionHeader: View {
                     }
                 }
                 if section.bytes > 0, largestBytes > 0 {
-                    LevelBar(fraction: Double(section.bytes) / Double(largestBytes), height: 3)
+                    LevelBar(part: section.bytes, of: largestBytes, height: 3)
                         .padding(.leading, 52)
                 }
             }

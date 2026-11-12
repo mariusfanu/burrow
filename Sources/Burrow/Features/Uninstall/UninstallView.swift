@@ -241,10 +241,7 @@ private struct AppSizeColumn: View {
                     .font(.callout)
                     .monospacedDigit()
                     .transition(.opacity)
-                LevelBar(
-                    fraction: largestSize > 0 ? Double(size) / Double(largestSize) : 0,
-                    height: 3
-                )
+                LevelBar(part: size, of: largestSize, height: 3)
             case .pending:
                 ProgressView()
                     .controlSize(.mini)

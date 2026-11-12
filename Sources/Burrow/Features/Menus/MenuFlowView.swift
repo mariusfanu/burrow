@@ -185,10 +185,7 @@ private struct MenuItemRow: View {
                 Text(item.sizeText ?? "")
                     .font(.callout)
                     .monospacedDigit()
-                LevelBar(
-                    fraction: largestBytes > 0 ? Double(item.bytes) / Double(largestBytes) : 0,
-                    height: 3
-                )
+                LevelBar(part: item.bytes, of: largestBytes, height: 3)
             }
             .frame(width: 84, alignment: .trailing)
         }

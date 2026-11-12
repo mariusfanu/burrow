@@ -62,7 +62,7 @@ private struct HistorySessions: View {
 
     private var visibleSessions: [HistoryReport.Session] {
         (model.report?.sessions ?? []).filter { session in
-            guard (session.items ?? 0) > 0 || (session.operationCount ?? 0) > 0 else { return false }
+            guard session.recordedWork else { return false }
             return model.includesPreviews || !session.isPreview
         }
     }
@@ -70,7 +70,7 @@ private struct HistorySessions: View {
     var body: some View {
         let sessions = visibleSessions
         let realSessions = sessions.filter { !$0.isPreview }
-        let totalFreed = realSessions.compactMap { SizeText.bytes(from: $0.size ?? "") }.saturatingSum
+        let totalFreed = realSessions.map(\.bytes).saturatingSum
         if sessions.isEmpty {
             if model.isLoading, model.report == nil {
                 WorkingView(title: "Reading the Logs")

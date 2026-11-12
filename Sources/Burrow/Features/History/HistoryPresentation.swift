@@ -34,6 +34,9 @@ extension HistoryReport.Session {
         return HistoryDate.text(for: date)
     }
 
+    /// False for a logged session that touched nothing, which History leaves out.
+    var recordedWork: Bool { (items ?? 0) > 0 || (operationCount ?? 0) > 0 }
+
     var bytes: Int64 { SizeText.bytes(from: size ?? "") ?? 0 }
 
     /// The size column, or nothing when the session didn't free anything. A column of

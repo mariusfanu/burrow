@@ -54,7 +54,7 @@ struct OverviewView: View {
     private var recentSessions: [HistoryReport.Session] {
         Array(
             (app.history.report?.sessions ?? [])
-                .filter { !$0.isPreview && (($0.items ?? 0) > 0 || ($0.operationCount ?? 0) > 0) }
+                .filter { !$0.isPreview && $0.recordedWork }
                 .prefix(3)
         )
     }

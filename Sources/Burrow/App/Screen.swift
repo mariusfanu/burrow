@@ -54,6 +54,14 @@ enum Screen: String, CaseIterable, Identifiable, Hashable {
     /// Position in the sidebar, which sets the direction of page transitions.
     var order: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 
+    /// Every page except the Overview, which is where they are listed.
+    static let tools = allCases.filter { $0 != .overview }
+
+    /// Command-1 through Command-9 for the first nine pages.
+    var goShortcut: KeyboardShortcut? {
+        order < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(order + 1)")), modifiers: .command) : nil
+    }
+
     struct Group: Identifiable {
         let title: String?
         let screens: [Screen]

@@ -47,13 +47,9 @@ struct BurrowCommands: Commands {
         }
 
         CommandMenu("Go") {
-            ForEach(Screen.allCases.enumerated(), id: \.element) { index, screen in
-                if index < 9 {
-                    Button(screen.title) { model.selection = screen }
-                        .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
-                } else {
-                    Button(screen.title) { model.selection = screen }
-                }
+            ForEach(Screen.allCases) { screen in
+                Button(screen.title) { model.selection = screen }
+                    .keyboardShortcut(screen.goShortcut)
             }
             Divider()
             Button("Back") {

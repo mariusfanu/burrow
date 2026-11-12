@@ -13,7 +13,6 @@ struct OverviewView: View {
     private var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: Theme.Space.cluster, alignment: .top), count: columnCount)
     }
-    private let tools: [Screen] = [.clean, .uninstall, .purge, .installers, .slim, .optimize, .analyze, .status, .history]
 
     var body: some View {
         ScrollView {
@@ -21,7 +20,7 @@ struct OverviewView: View {
                 OverviewHero(cli: cli)
                 VStack(alignment: .leading, spacing: Theme.Space.group) {
                     LazyVGrid(columns: columns, spacing: Theme.Space.cluster) {
-                        ForEach(tools.enumerated(), id: \.element) { index, screen in
+                        ForEach(Screen.tools.enumerated(), id: \.element) { index, screen in
                             ToolTile(screen: screen, fact: fact(for: screen))
                                 .arrives(index: index)
                         }

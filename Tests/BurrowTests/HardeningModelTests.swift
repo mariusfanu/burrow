@@ -60,10 +60,9 @@ struct MenuFlowModelTests {
         #expect(model.run.consequence?.contains("permanently") == true)
         model.selection = [1]
         model.applySelection(preview: false)
-        try await eventually { FileManager.default.fileExists(atPath: directory + "/result") }
+        try await eventually { !model.run.isRunning }
         let result = try String(contentsOfFile: directory + "/result", encoding: .utf8)
         #expect(result == "0 1 0")
-        try await eventually { !model.run.isRunning }
         model.finishRun()
     }
 

@@ -7,6 +7,7 @@ struct AnalyzeView: View {
     @Environment(\.undoManager) private var undoManager
 
     var body: some View {
+        @Bindable var model = model
         VStack(spacing: 0) {
             AnalyzePathBar(model: model, cli: cli)
                 .disabled(model.isTrashing)
@@ -27,7 +28,7 @@ struct AnalyzeView: View {
         .onAppear { model.undoManager = undoManager }
         .onChange(of: model.noticeMessage) { Announcer.say(model.noticeMessage) }
         .onChange(of: model.errorMessage) { Announcer.say(model.errorMessage) }
-        .alert(model.pendingTrash?.title ?? "", isPresented: isConfirmingTrash) {
+        .alert(model.pendingTrash?.title ?? "", isPresented: $model.isConfirmingTrash) {
             // Return mustn't be the way a high-risk move happens.
             Button("Cancel", role: .cancel) {}
                 .keyboardShortcut(.defaultAction)
@@ -35,13 +36,6 @@ struct AnalyzeView: View {
         } message: {
             Text(model.pendingTrash?.message ?? "")
         }
-    }
-
-    private var isConfirmingTrash: Binding<Bool> {
-        Binding(
-            get: { model.pendingTrash != nil },
-            set: { if !$0 { model.pendingTrash = nil } }
-        )
     }
 
     @Sendable

@@ -34,6 +34,13 @@ final class AnalyzeModel {
     var trashRisks: [String: TrashRisk.Reason] { presentation?.trashRisks ?? [:] }
     /// The question waiting on an answer before a high-risk selection moves.
     var pendingTrash: TrashConfirmation?
+
+    /// Whether the high-risk question is on screen. Dismissing it drops the question.
+    var isConfirmingTrash: Bool {
+        get { pendingTrash != nil }
+        set { if !newValue { pendingTrash = nil } }
+    }
+
     private(set) var isLoading = false
     private(set) var isTrashing = false
     /// Set for the next map change: true when zooming in, false when zooming out.

@@ -405,7 +405,11 @@ struct HighRiskTrashTests {
         let (model, recorded) = try await fixture()
         model.selection = [risky]
         model.trashSelection(cli: fixtureCLI)
-        model.pendingTrash = nil
+        #expect(model.isConfirmingTrash)
+        model.isConfirmingTrash = false
+        #expect(model.pendingTrash == nil)
+        model.isConfirmingTrash = true
+        #expect(model.pendingTrash == nil)
         model.confirmPendingTrash(cli: fixtureCLI)
         try await Task.sleep(for: .milliseconds(50))
         #expect(await recorded.moved.isEmpty)

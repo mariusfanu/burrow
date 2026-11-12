@@ -3,12 +3,6 @@ import Foundation
 import Observation
 import SwiftUI
 
-/// A question from the CLI, presented as a native sheet.
-struct PromptRequest: Identifiable, Equatable {
-    let id = UUID()
-    let prompt: CLIPrompt
-}
-
 /// Runs one CLI command on a pseudo-terminal and publishes its progress to views.
 @MainActor
 @Observable

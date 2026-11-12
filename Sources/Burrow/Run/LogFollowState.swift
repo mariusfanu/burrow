@@ -32,9 +32,3 @@ struct LogFollowState: Equatable {
 
     mutating func jumpToLatest() { isFollowing = true }
 }
-
-struct LogViewport: Equatable {
-    let offset: CGFloat
-    let contentHeight: CGFloat
-    let viewportHeight: CGFloat
-}

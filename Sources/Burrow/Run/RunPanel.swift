@@ -49,12 +49,12 @@ struct RunPanelContent: View {
 
     var body: some View {
         if isFinished, !showsLogByDefault {
-            CompletionView(run: run, showsDetails: $showsDetails)
+            CompletionHero(run: run, showsDetails: $showsDetails)
                 .transition(Motion.materialize)
         } else {
             VStack(spacing: 0) {
                 if isFinished {
-                    CompletionView(run: run, showsDetails: $showsDetails, isCompact: true)
+                    CompletionBanner(run: run, showsDetails: $showsDetails)
                         .transition(Motion.materialize)
                 } else {
                     RunProgressHeader(run: run)

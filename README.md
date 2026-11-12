@@ -66,7 +66,8 @@ Run `swift test` from the repository root after making changes. The default suit
 
 ## Export a notarized app from Xcode
 
-Generate the macOS app project from `project.yml`.
+Generate the macOS app project from `project.yml`. Xcode keeps the Burrow source
+folder in sync with files added, moved or renamed on disk.
 
 ```bash
 brew install xcodegen

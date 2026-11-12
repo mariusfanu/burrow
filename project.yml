@@ -4,11 +4,14 @@ packages:
     path: .
 targets:
   BurrowApp:
+    productName: Burrow
     type: application
     platform: macOS
     deploymentTarget: "26.0"
     sources:
-      - Sources/Burrow
+      - path: Sources/Burrow
+        name: Burrow
+        type: syncedFolder
       - path: Resources/Burrow.icon
         type: file
         buildPhase: resources

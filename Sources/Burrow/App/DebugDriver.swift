@@ -120,7 +120,8 @@ enum DebugDriver {
             await waitUntil(120) { run.promptRequest != nil || !run.isRunning }
             log("prompt \(String(describing: run.promptRequest?.prompt)) phase \(run.phase)")
         case "prompt.confirm":
-            run(argument, model).answerConfirm()
+            let controller = run(argument, model)
+            controller.answerConfirm(requestID: controller.promptRequest?.id)
         case "prompt.decline":
             run(argument, model).answerDecline()
         case "prompt.system":

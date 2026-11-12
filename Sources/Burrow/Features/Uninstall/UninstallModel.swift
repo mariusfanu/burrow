@@ -296,11 +296,18 @@ final class UninstallModel {
     func beginRemoval(cli: CLIInfo, preview: Bool) {
         let chosen = selectedApps
         guard !chosen.isEmpty else { return }
+        let terms = UninstallTargeting.terms(for: chosen, among: apps)
+        guard terms.count == chosen.count else {
+            errorMessage = "Mole couldn’t identify one of the selected apps by a usable name. Change the selection and try again."
+            return
+        }
         var arguments = ["uninstall"]
         if preview { arguments.append("--dry-run") }
         if includePersonalData { arguments.append("--with-data") }
         if deletePermanently, !preview { arguments.append("--permanent") }
-        arguments += UninstallTargeting.terms(for: chosen, among: apps)
+        arguments += terms
+        var environment = CLILocator.environment()
+        environment["MOLE_DELETE_MODE"] = "trash"
 
         stopMeasurements()
         errorMessage = nil
@@ -314,8 +321,9 @@ final class UninstallModel {
             columns: 180,
             consequence: preview ? nil : removalConsequence,
             isIrreversible: deletePermanently,
-            confirmationCheck: { [weak self] lines in
-                self?.planMatches(lines, chosen: chosen) ?? false
+            environment: environment,
+            confirmationCheck: { [weak self] lines, prompt in
+                self?.planMatches(lines, prompt: prompt, chosen: chosen) ?? false
             }
         )
     }
@@ -344,10 +352,11 @@ final class UninstallModel {
     }
 
     /// Stops the command at its question when it would remove anything but the chosen apps.
-    private func planMatches(_ lines: [String], chosen: [InstalledApp]) -> Bool {
+    private func planMatches(_ lines: [String], prompt: CLIPrompt, chosen: [InstalledApp]) -> Bool {
         let planned = UninstallPlan.appPaths(in: lines, home: home)
         let expected = chosen.map(\.path)
-        guard planned != Set(expected.compactMap { $0 }) || expected.contains(nil) else { return true }
+        if planned.count == expected.count, planned == Set(expected.compactMap({ $0 })),
+           UninstallPlan.appCount(in: prompt) == expected.count { return true }
         run.reset()
         errorMessage = "The CLI’s plan didn’t match the apps you chose, so nothing was removed. "
             + "Apps with the same name can’t always be told apart. "

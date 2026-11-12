@@ -3,6 +3,13 @@ import BurrowCore
 
 final class TerminalCanvas: NSView {
     var terminal: CLITerminal? { didSet { refreshDiagnostics() } }
+    var sendInput: ((String) -> Void)? {
+        didSet {
+            setAccessibilityHelp(sendInput == nil
+                ? "Use Select All and Copy to copy the visible output."
+                : "Type to answer the command. Use Select All and Copy to copy the visible output.")
+        }
+    }
     private(set) var diagnosticText = ""
     private var selectsAllOutput = false
 
@@ -19,7 +26,7 @@ final class TerminalCanvas: NSView {
         setAccessibilityElement(true)
         setAccessibilityRole(.textArea)
         setAccessibilityLabel("Terminal output")
-        setAccessibilityHelp("Live terminal. Type to answer the command. Use Select All and Copy to copy the visible output.")
+        setAccessibilityHelp("Use Select All and Copy to copy the visible output.")
     }
 
     @available(*, unavailable)
@@ -185,28 +192,29 @@ final class TerminalCanvas: NSView {
             default: break
             }
         }
-        guard let terminal, terminal.isRunning else {
+        guard let sendInput, terminal?.isRunning == true else {
             super.keyDown(with: event)
             return
         }
         selectsAllOutput = false
         if let sequence = Self.sequence(for: event) {
-            terminal.send(sequence)
+            sendInput(sequence)
         } else if event.modifierFlags.contains(.control), let characters = event.charactersIgnoringModifiers,
                   let scalar = characters.lowercased().unicodeScalars.first,
                   (97...122).contains(scalar.value) {
-            terminal.send([UInt8(scalar.value - 96)])
+            sendInput(String(UnicodeScalar(UInt8(scalar.value - 96))))
         } else if let characters = event.characters, !event.modifierFlags.contains(.command) {
-            terminal.send(characters)
+            sendInput(characters)
         } else {
             super.keyDown(with: event)
         }
     }
 
     @objc func paste(_ sender: Any?) {
+        guard let sendInput, terminal?.isRunning == true else { return }
         selectsAllOutput = false
         if let text = NSPasteboard.general.string(forType: .string) {
-            terminal?.send(text)
+            sendInput(text)
         }
     }
 

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ConfirmPromptContent: View {
     let text: String
+    let requestID: UUID
     let run: RunController
 
     var body: some View {
@@ -35,12 +36,16 @@ struct ConfirmPromptContent: View {
             .background(.fill.quinary, in: .rect(cornerRadius: Theme.Radius.card))
         }
         HStack {
-            Button("Show Terminal", action: run.showTerminalForPrompt)
-                .help("Answer in the real terminal, for options such as choosing personal data")
+            if run.allowsTerminalInput {
+                Button("Show Terminal", action: run.showTerminalForPrompt)
+                    .help("Answer in the real terminal")
+            }
             Spacer()
             Button("Cancel", role: .cancel, action: run.answerDecline)
                 .keyboardShortcut(.cancelAction)
-            Button(run.isPreview ? "Continue" : CLIPrompt.confirmTitle(from: text), action: run.answerConfirm)
+            Button(run.isPreview ? "Continue" : CLIPrompt.confirmTitle(from: text)) {
+                run.answerConfirm(requestID: requestID)
+            }
                 .buttonStyle(.glassProminent)
                 .keyboardShortcut(confirmsWithReturn ? .defaultAction : nil)
         }

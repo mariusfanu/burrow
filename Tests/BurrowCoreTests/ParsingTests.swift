@@ -366,6 +366,12 @@ import Testing
         #expect(UninstallPlan.appPaths(in: ["◎ Xcode , 3.98GB", "  ✓ /Applications/Xcode.app"], home: "/h").isEmpty)
     }
 
+    @Test(arguments: ["  • unknown path format", "  ✓ /Applications/Chosen.app"])
+    func anIncompleteOrDuplicateExtraAppInvalidatesThePlan(extra: String) {
+        let lines = ["Files to be removed:", "◎ Chosen", "  ✓ /Applications/Chosen.app", "◎ Other", extra]
+        #expect(UninstallPlan.appPaths(in: lines, home: "/h").isEmpty)
+    }
+
     @Test func theLatestPlanWinsWhenTheCLIPrintsItAgain() {
         let lines = ["Files to be removed:", "◎ Old", "  ✓ /Applications/Old.app", "Files to be removed:", "◎ New", "  ✓ /Applications/New.app"]
         #expect(UninstallPlan.appPaths(in: lines, home: "/h") == ["/Applications/New.app"])

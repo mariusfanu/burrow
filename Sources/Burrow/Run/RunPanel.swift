@@ -13,7 +13,7 @@ struct RunPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             if run.isTerminalVisible, let terminal = run.terminal {
-                TerminalPanel(terminal: terminal, revision: run.screenRevision)
+                TerminalPanel(terminal: terminal, revision: run.screenRevision, run: run)
                     .clipShape(.rect(cornerRadius: Theme.Radius.card))
                     .padding(Theme.Space.item)
                     .transition(Motion.materialize)

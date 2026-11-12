@@ -7,7 +7,8 @@ import Foundation
 /// `Xcode-beta.app` do, and `uninstall_name` can be a Homebrew cask that matches neither.
 public enum UninstallTargeting {
     /// One word per app, preferring a word only that app answers to. An app with no such
-    /// word gets its folder name, and `UninstallPlan` then checks which app the CLI chose.
+    /// word gets a usable fallback, and `UninstallPlan` then checks which app the CLI chose.
+    /// An app with no safe positional spelling produces no term.
     public static func terms(for selected: [InstalledApp], among all: [InstalledApp]) -> [String] {
         guard !selected.isEmpty else { return [] }
         // Count how many apps in `all` match each name or folder once, so unique checks are O(1).
@@ -27,14 +28,15 @@ public enum UninstallTargeting {
                 }
             }
         }
-        return selected.map { app in
+        return selected.compactMap { app in
             let candidates = [app.uninstallName, app.name, folderName(of: app)].compactMap { $0 }
+                .filter { !$0.isEmpty && !$0.hasPrefix("-") && !$0.utf8.contains(0) }
             let unique = candidates.first { candidate in
                 let word = candidate.lowercased()
                 guard let match = wordCounts[word] else { return false }
                 return match.count == 1 && match.id == app.id
             }
-            return unique ?? folderName(of: app) ?? app.uninstallName
+            return unique ?? folderName(of: app).flatMap { candidates.contains($0) ? $0 : nil } ?? candidates.first
         }
     }
 

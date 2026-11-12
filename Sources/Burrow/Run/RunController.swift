@@ -72,7 +72,9 @@ final class RunController {
     private var menuCheck: (revision: Int, isOnScreen: Bool)?
     private var answeredPartial: String?
     private var promptIsInTerminal = false
-    private var confirmationCheck: (@MainActor ([String]) -> Bool)?
+    private var confirmationCheck: (@MainActor ([String], CLIPrompt) -> Bool)?
+    private var confirmationLines: [String] = []
+    private var approvedGuardedPlan = false
     private var promptCheck: Task<Void, Never>?
     private let policy: ExecutionPolicy
 
@@ -103,7 +105,8 @@ final class RunController {
         keepsLogAtEnd: Bool = false,
         consequence: String? = nil,
         isIrreversible: Bool = false,
-        confirmationCheck: (@MainActor ([String]) -> Bool)? = nil
+        environment: [String: String] = CLILocator.environment(),
+        confirmationCheck: (@MainActor ([String], CLIPrompt) -> Bool)? = nil
     ) {
         reset()
         self.confirmationCheck = confirmationCheck
@@ -125,7 +128,7 @@ final class RunController {
             let terminal = try CLITerminal(
                 executable: cli.executable,
                 arguments: arguments,
-                environment: CLILocator.environment(),
+                environment: environment,
                 rows: rows,
                 columns: columns
             )
@@ -189,6 +192,8 @@ final class RunController {
         answeredPartial = nil
         promptIsInTerminal = false
         confirmationCheck = nil
+        confirmationLines.removeAll()
+        approvedGuardedPlan = false
         wasCancelled = false
         wasDeclined = false
         isPreview = false
@@ -210,7 +215,10 @@ final class RunController {
         terminal?.cancel()
     }
 
+    var allowsTerminalInput: Bool { confirmationCheck == nil }
+
     func send(_ text: String) {
+        guard allowsTerminalInput, isRunning, !wasCancelled, mayAnswerCommand() else { return }
         terminal?.send(text)
     }
 
@@ -224,13 +232,22 @@ final class RunController {
     /// Answers in the terminal instead. The question stays unanswered, so it mustn't count as
     /// new when the terminal's first resize reports the same text again.
     func showTerminalForPrompt() {
+        guard allowsTerminalInput else { return }
         markAnswered()
         promptIsInTerminal = true
         isTerminalVisible = true
     }
 
-    func answerConfirm() {
-        guard mayAnswerCommand() else { return }
+    func answerConfirm(requestID: UUID? = nil) {
+        guard isRunning, !wasCancelled, mayAnswerCommand() else { return }
+        if let confirmationCheck {
+            guard let terminal, terminal.isRunning, let request = promptRequest, request.id == requestID,
+                  case .confirm = request.prompt,
+                  PromptDetector.detect(partial: terminal.partial) == request.prompt,
+                  confirmationCheck(confirmationLines, request.prompt) else { return }
+            approvedGuardedPlan = true
+            confirmationLines.removeAll()
+        }
         markAnswered()
         terminal?.send("\r")
     }
@@ -242,13 +259,13 @@ final class RunController {
     }
 
     func answerYesNo(_ yes: Bool) {
-        guard mayAnswerCommand() else { return }
+        guard allowsTerminalInput, mayAnswerCommand() else { return }
         markAnswered()
         terminal?.send(yes ? "y\r" : "n\r")
     }
 
     func answerSystemClean(useAdmin: Bool) {
-        guard mayAnswerCommand() else { return }
+        guard allowsTerminalInput, mayAnswerCommand() else { return }
         markAnswered()
         terminal?.send(useAdmin ? "\r" : " ")
     }
@@ -260,6 +277,10 @@ final class RunController {
         guard let terminal, terminal.isEchoOff else {
             promptRequest = nil
             return
+        }
+        if !allowsTerminalInput {
+            guard approvedGuardedPlan, let prompt = promptRequest?.prompt, case .password = prompt,
+                  PromptDetector.detect(partial: terminal.partial) == prompt else { return }
         }
         markAnswered()
         terminal.send(password + "\r")
@@ -285,6 +306,18 @@ final class RunController {
         // A finished line means the prompt that was answered is gone, so identical text
         // on the new line is a new question. sudo re-asks with the same "Password:".
         answeredPartial = nil
+        if confirmationCheck != nil {
+            if case .confirm = promptRequest?.prompt { promptRequest = nil }
+            if raw.trimmingCharacters(in: .whitespaces) == "Files to be removed:" {
+                confirmationLines = [raw]
+                approvedGuardedPlan = false
+            } else if confirmationLines.count == Self.maximumLogRows {
+                // Refuse an incomplete plan. Only a fresh header can start a new one.
+                confirmationLines.removeAll()
+            } else if !confirmationLines.isEmpty {
+                confirmationLines.append(raw)
+            }
+        }
         guard !isLogSuppressed, !LogLine.isDecoration(raw) else { return }
         // A prompt line reaches the log once answered; the sheet already showed it.
         if PromptDetector.detect(partial: raw) != nil { return }
@@ -370,6 +403,7 @@ final class RunController {
             return
         }
         guard promptRequest?.prompt != prompt else { return }
+        promptRequest = nil
 
         // A prompt waits, while progress text moves on. Raise a sheet only for text that
         // has held still, so that a passing line that looks like a question can't.
@@ -387,7 +421,13 @@ final class RunController {
         if case .password = prompt, !terminal.isEchoOff { return }
         // The plan beside the question, and the one being checked, must be complete.
         flushLines()
-        if case .confirm = prompt, let confirmationCheck, !confirmationCheck(lines.map(\.raw)) { return }
+        if let confirmationCheck {
+            if case .password = prompt, approvedGuardedPlan {
+                // Mole asks for admin access after approval.
+            } else if !confirmationCheck(confirmationLines, prompt) {
+                return
+            }
+        }
         promptRequest = PromptRequest(prompt: prompt)
     }
 

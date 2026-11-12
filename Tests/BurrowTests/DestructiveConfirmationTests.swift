@@ -59,15 +59,38 @@ struct UninstallPlanGuardTests {
      {"name":"Xcode","path":"/Applications/Xcode-beta.app","uninstall_name":"Xcode"}]
     """
 
-    private func fakeCLI(planning path: String) throws -> (CLIInfo, String) {
+    private func fakeCLI(planning path: String, question: String = "Remove 1 app, 1GB  Enter confirm, ESC cancel: ") throws -> (CLIInfo, String) {
         try makeScript("""
         #!/bin/bash
         printf '%s\\n' "$@" > "$(dirname "$0")/args"
+        printf '%s' "$MOLE_DELETE_MODE" > "$(dirname "$0")/delete-mode"
         printf 'Files to be removed:\\n◎ Xcode , 1GB\\n  ✓ \(path) , 1GB\\n\\n'
-        printf 'Remove 1 app, 1GB  Enter confirm, ESC cancel: '
-        IFS= read -r -s -n1 key
-        [[ -z "$key" ]] && : > "$(dirname "$0")/removed"
+        printf '%s' '\(question)'
+        if IFS= read -r -s -n1 key && [[ -z "$key" || "$key" == y ]]; then
+            : > "$(dirname "$0")/removed"
+        fi
         """)
+    }
+
+    @Test(arguments: [false, true]) func unexpectedInputCannotApproveRemoval(alternatePrompt: Bool) async throws {
+        let (cli, directory) = try fakeCLI(
+            planning: "/Applications/Xcode.app",
+            question: alternatePrompt ? "Remove 1 app [y/N]: " : "Remove 1 app, 1GB  Enter confirm, ESC cancel: "
+        )
+        let model = try await loaded(cli: cli)
+        defer { model.run.reset() }
+        model.selection = ["/Applications/Xcode-beta.app"]
+        model.beginRemoval(cli: cli, preview: false)
+        if alternatePrompt {
+            try await eventually { model.run.promptRequest != nil || model.state == .idle }
+            if model.run.promptRequest != nil { model.run.answerYesNo(true) }
+        } else {
+            try await eventually { model.run.terminal?.partial.contains("Enter confirm") == true }
+            model.run.send("\r")
+        }
+        try await eventually { model.state == .idle || !model.run.isRunning }
+        #expect(model.state == .idle)
+        #expect(!FileManager.default.fileExists(atPath: directory + "/removed"))
     }
 
     private func loaded(cli: CLIInfo) async throws -> UninstallModel {
@@ -93,7 +116,13 @@ struct UninstallPlanGuardTests {
         try await eventually { model.run.promptRequest != nil }
         let arguments = try String(contentsOfFile: directory + "/args", encoding: .utf8)
         #expect(arguments.split(separator: "\n") == ["uninstall", "Xcode-beta"])
-        model.run.cancel()
+        #expect(try String(contentsOfFile: directory + "/delete-mode", encoding: .utf8) == "trash")
+        let request = try #require(model.run.promptRequest)
+        model.run.answerConfirm(requestID: UUID())
+        #expect(model.run.promptRequest == request)
+        model.run.answerConfirm(requestID: request.id)
+        try await eventually { !model.run.isRunning }
+        #expect(FileManager.default.fileExists(atPath: directory + "/removed"))
     }
 
     @Test func aStoppedAttemptDoesntPassItsOptionsToTheNextRemoval() async throws {

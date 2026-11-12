@@ -11,19 +11,33 @@ public enum UninstallPlan {
         }
         var paths = Set<String>()
         var awaitingPath = false
+        var readingApps = true
         for line in lines[(start + 1)...] {
-            guard line.hasPrefix(" ") else {
-                awaitingPath = line.hasPrefix("◎ ")
+            if line.hasPrefix("◎ ") {
+                guard readingApps, !awaitingPath else { return [] }
+                awaitingPath = true
                 continue
             }
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard awaitingPath, trimmed.hasPrefix("✓ ") else { continue }
+            if !trimmed.isEmpty, !line.hasPrefix(" ") {
+                guard !awaitingPath else { return [] }
+                readingApps = false
+            }
+            guard awaitingPath, line.hasPrefix(" "), trimmed.hasPrefix("✓ ") else { continue }
             awaitingPath = false
             var path = String(trimmed.dropFirst(2))
             if let size = path.range(of: " , ", options: .backwards) { path = String(path[..<size.lowerBound]) }
             if path == "~" || path.hasPrefix("~/") { path = home + path.dropFirst() }
-            paths.insert(path)
+            guard path.hasPrefix("/"), paths.insert(path).inserted else { return [] }
         }
-        return paths
+        return awaitingPath ? [] : paths
+    }
+
+    public static func appCount(in prompt: CLIPrompt) -> Int? {
+        guard case .confirm(let text) = prompt else { return nil }
+        let parts = CLIPrompt.question(from: text).split(separator: " ", maxSplits: 3)
+        guard parts.count >= 3, parts[0] == "Remove",
+              ["app", "app,", "apps", "apps,"].contains(parts[2]) else { return nil }
+        return Int(parts[1])
     }
 }

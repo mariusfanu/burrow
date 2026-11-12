@@ -16,7 +16,7 @@ struct PromptSheet: View {
             case .systemCleanChoice:
                 SystemCleanPromptContent(run: run)
             case .confirm(let text):
-                ConfirmPromptContent(text: text, run: run)
+                ConfirmPromptContent(text: text, requestID: request.id, run: run)
             case .yesNo(let text):
                 YesNoPromptContent(text: text, run: run)
             }

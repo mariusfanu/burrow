@@ -249,6 +249,29 @@ import Testing
 }
 
 @Suite struct ConfigTests {
+    @Test(arguments: [false, true]) func savingPreservesAValidFinalSymlink(relative: Bool) throws {
+        let home = TestScratch.root + "burrow-link-" + UUID().uuidString
+        let directory = home + "/.config/mole"
+        let target = directory + "/linked-whitelist"
+        let link = directory + "/whitelist"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        try "/tmp/keep\n".write(toFile: target, atomically: true, encoding: .utf8)
+        let destination = relative ? "linked-whitelist" : target
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: destination)
+        try WhitelistStore(home: home, cliRoot: nil).add("/tmp/new")
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link) == destination)
+        #expect(try String(contentsOfFile: target, encoding: .utf8).contains("/tmp/new"))
+    }
+
+    @Test func aPurgeDraftCannotOverwriteAChangedFile() throws {
+        let store = PurgePathsStore(home: TestScratch.root + UUID().uuidString)
+        try store.save(["~/old"])
+        let original = try store.snapshot()
+        try store.save(["~/external"])
+        #expect(throws: ConfigError.changed("purge_paths")) { try store.save(["~/draft"], replacing: original) }
+        #expect(try store.load() == ["~/external"])
+    }
+
     private let baseScript = #"""
     declare -a DEFAULT_WHITELIST_PATTERNS=(
         "$HOME/Library/Caches/ms-playwright*"

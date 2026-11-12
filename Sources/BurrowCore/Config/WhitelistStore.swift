@@ -56,9 +56,7 @@ public struct WhitelistStore: Sendable {
     }
 
     public static func parse(_ text: String) -> [String] {
-        text.split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+        ConfigFile.parseList(text)
     }
 
     /// Mirrors the checks in `load_whitelist` (`lib/core/base.sh`), which silently ignore

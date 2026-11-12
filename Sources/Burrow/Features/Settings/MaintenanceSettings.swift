@@ -44,7 +44,7 @@ struct MaintenanceSettings: View {
             model.isEnabled(task.action)
         } set: { isOn in
             guard !app.effectivePreview else { return }
-            model.setEnabled(isOn, action: task.action, save: store.save)
+            model.setEnabled(isOn, action: task.action, save: store.setEnabled)
         }
     }
 }

@@ -2,6 +2,11 @@ import Foundation
 
 /// `~/.config/mole/purge_paths`: where `mo purge` looks for projects.
 public struct PurgePathsStore: Sendable {
+    public struct Snapshot: Sendable {
+        fileprivate let text: String?
+        public var paths: [String] { ConfigFile.parseList(text ?? "") }
+    }
+
     private let fileURL: URL
 
     public init(home: String = NSHomeDirectory()) {
@@ -9,16 +14,23 @@ public struct PurgePathsStore: Sendable {
     }
 
     public func load() throws -> [String] {
-        guard let text = try ConfigFile.read(fileURL) else { return [] }
-        return WhitelistStore.parse(text)
+        try snapshot().paths
+    }
+
+    public func snapshot() throws -> Snapshot {
+        try Snapshot(text: ConfigFile.read(fileURL))
     }
 
     public func save(_ paths: [String]) throws {
+        try save(paths, replacing: snapshot())
+    }
+
+    public func save(_ paths: [String], replacing previous: Snapshot) throws {
         let header = """
         # Mole Purge Paths - Auto-discovered project directories
         # Edit this file to customize, or run: mo purge --paths
         # Add one path per line (supports ~ for home directory)
         """
-        try ConfigFile.write(([header, ""] + paths).joined(separator: "\n") + "\n", to: fileURL)
+        try ConfigFile.write(([header, ""] + paths).joined(separator: "\n") + "\n", to: fileURL, replacing: previous.text)
     }
 }

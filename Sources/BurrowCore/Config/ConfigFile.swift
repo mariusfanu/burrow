@@ -27,12 +27,31 @@ enum ConfigFile {
     }
 
     static func write(_ text: String, to url: URL) throws {
-        // Recheck before writing: the file may have become unreadable since the UI loaded it.
-        _ = try read(url)
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try text.write(to: url, atomically: true, encoding: .utf8)
+        try write(text, to: url, replacing: read(url))
+    }
+
+    static func write(_ text: String, to url: URL, replacing previous: String?) throws {
+        let target = url.resolvingSymlinksInPath()
+        let identity = TrashMover.FileIdentity(path: target.path)
+        if previous != nil {
+            let attributes = try FileManager.default.attributesOfItem(atPath: target.path)
+            guard identity != nil, attributes[.type] as? FileAttributeType == .typeRegular else {
+                throw ConfigError.unreadable(url.lastPathComponent)
+            }
+        }
+        if previous == nil {
+            try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
+        guard try read(url) == previous, url.resolvingSymlinksInPath() == target,
+              TrashMover.FileIdentity(path: target.path) == identity else {
+            throw ConfigError.changed(url.lastPathComponent)
+        }
+        try text.write(to: target, atomically: true, encoding: .utf8)
+    }
+
+    static func parseList(_ text: String) -> [String] {
+        text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
     }
 }

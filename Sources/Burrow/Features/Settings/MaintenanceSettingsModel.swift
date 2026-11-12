@@ -24,14 +24,10 @@ final class MaintenanceSettingsModel {
 
     func isEnabled(_ action: String) -> Bool { !excluded.contains(action) }
 
-    func setEnabled(_ enabled: Bool, action: String, save: (Set<String>) throws -> Void) {
+    func setEnabled(_ enabled: Bool, action: String, save: (Bool, String) throws -> Set<String>) {
         guard isLoaded else { return }
-        var proposed = excluded
-        if enabled { proposed.remove(action) }
-        else { proposed.insert(action) }
         do {
-            try save(proposed)
-            excluded = proposed
+            excluded = try save(enabled, action)
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

@@ -22,12 +22,29 @@ public struct OptimizeWhitelistStore: Sendable {
 
     public func load() throws -> Set<String> {
         guard let text = try ConfigFile.read(fileURL) ?? ConfigFile.read(legacyURL) else { return [] }
-        return Set(WhitelistStore.parse(text))
+        return Set(ConfigFile.parseList(text))
     }
 
     public func save(_ actions: Set<String>) throws {
+        try save(actions, replacing: ConfigFile.read(fileURL))
+    }
+
+    public func setEnabled(_ enabled: Bool, action: String) throws -> Set<String> {
+        let current = try ConfigFile.read(fileURL)
+        let legacy = try current == nil ? ConfigFile.read(legacyURL) : nil
+        var actions = Set(ConfigFile.parseList(current ?? legacy ?? ""))
+        if enabled { actions.remove(action) }
+        else { actions.insert(action) }
+        if current == nil, try ConfigFile.read(legacyURL) != legacy {
+            throw ConfigError.changed(legacyURL.lastPathComponent)
+        }
+        try save(actions, replacing: current)
+        return actions
+    }
+
+    private func save(_ actions: Set<String>, replacing previous: String?) throws {
         let header = "# Mole Optimization Whitelist - These checks will be skipped during optimization"
-        try ConfigFile.write(([header] + actions.sorted()).joined(separator: "\n") + "\n", to: fileURL)
+        try ConfigFile.write(([header] + actions.sorted()).joined(separator: "\n") + "\n", to: fileURL, replacing: previous)
     }
 
     /// Reads the task names and identifiers from the installed CLI's catalog.

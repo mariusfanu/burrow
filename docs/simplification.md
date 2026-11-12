@@ -11,6 +11,7 @@ What has been simplified, what was measured, and what was deliberately left alon
 - **P2 Status stream.** Each attempt drains sample events in order before accounting for retries. Live status now expires when the current source goes quiet. The parser rejects unrecognized and oversized records and recovers at the next line. All 18 focused status and app coordination tests passed.
 - **P2 Disk Explorer consistency.** Disk changes cancel obsolete scans, clear cached folders and disable mutations until a current result arrives. Missing paths leave the map without contributing to the move count or Undo. All 22 focused Disk Explorer and Trash tests passed.
 - **P2 Clean path list.** The preview attaches a path list only when the command announces the expected file and it changed during the run. An unavailable list leaves the summary intact. The shared Mole file still limits attribution across concurrent CLI processes. All 13 focused Clean, parser and scan ownership tests passed.
+- **P2 Linked settings and external edits.** Saves preserve verified final symlinks, Maintenance applies a single change to current settings, and Purge keeps the draft when its source changes. The shared list parser moved into the config layer. All 27 focused config and settings tests passed.
 
 ## Core hygiene follow-up — 12 November 2026
 

@@ -8,7 +8,8 @@ struct PurgePathsSheet: View {
     @State private var paths: [String] = []
     @State private var selection: String?
     @State private var errorMessage: String?
-    @State private var loadFailed = false
+    @State private var original: PurgePathsStore.Snapshot?
+    @State private var needsReload = false
 
     private let store = PurgePathsStore(home: AppModel.home)
 
@@ -31,12 +32,13 @@ struct PurgePathsSheet: View {
                 Button("Remove", action: removeSelected)
                     .disabled(selection == nil)
                 Spacer()
+                if needsReload { Button("Reload", action: load) }
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Save", action: save)
                     .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(loadFailed || app.effectivePreview)
+                    .disabled(original == nil || needsReload || app.effectivePreview)
                     .help(app.effectivePreview ? "Turn off Preview Mode to change these" : "Save these locations")
             }
             if let errorMessage {
@@ -50,9 +52,14 @@ struct PurgePathsSheet: View {
 
     private func load() {
         do {
-            paths = try store.load()
+            let loaded = try store.snapshot()
+            original = loaded
+            paths = loaded.paths
+            selection = nil
+            needsReload = false
+            errorMessage = nil
         } catch {
-            loadFailed = true
+            original = nil
             errorMessage = "The current list couldn’t be read, so it can’t be edited here: \(error.localizedDescription)"
         }
     }
@@ -69,10 +76,13 @@ struct PurgePathsSheet: View {
     }
 
     private func save() {
-        guard !loadFailed, !app.effectivePreview else { return }
+        guard let original, !needsReload, !app.effectivePreview else { return }
         do {
-            try store.save(paths)
+            try store.save(paths, replacing: original)
             dismiss()
+        } catch let error as ConfigError {
+            if case .changed = error { needsReload = true }
+            errorMessage = error.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }

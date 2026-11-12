@@ -1,11 +1,5 @@
 import Foundation
 
-public struct AssembledLine: Sendable, Equatable {
-    public let text: String
-    /// True when the line was printed while the program held the alternate screen.
-    public let fromAlternateScreen: Bool
-}
-
 /// Turns a raw terminal stream into finished lines of plain text.
 ///
 /// Carriage-return redraws such as spinners overwrite the pending line and never

@@ -2,41 +2,6 @@ import CPTY
 import Darwin
 import Foundation
 
-public struct CommandResult: Sendable {
-    public let status: Int32
-    public let stdout: String
-    public let stderr: String
-
-    public init(status: Int32, stdout: String, stderr: String) {
-        self.status = status
-        self.stdout = stdout
-        self.stderr = stderr
-    }
-
-    public var succeeded: Bool { status == 0 }
-
-    /// Throws the command's stderr, without its escape codes, if it failed.
-    public func requireSuccess() throws {
-        guard succeeded else {
-            throw CommandError.failed(status: status, message: ANSI.strip(stderr))
-        }
-    }
-}
-
-public enum CommandError: Error, LocalizedError {
-    case timedOut
-    case failed(status: Int32, message: String)
-
-    public var errorDescription: String? {
-        switch self {
-        case .timedOut:
-            "The command took too long and was stopped."
-        case .failed(let status, let message):
-            message.isEmpty ? "The command exited with status \(status)." : message
-        }
-    }
-}
-
 /// Runs commands without a terminal, for read-only work such as JSON and previews.
 public enum CommandRunner {
     /// Runs a command to completion. Cancelling the calling task terminates it.

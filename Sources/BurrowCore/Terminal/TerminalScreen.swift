@@ -1,32 +1,5 @@
 import Foundation
 
-/// An RGB color, or one of the terminal's palette entries.
-public enum TerminalColor: Sendable, Equatable, Hashable {
-    case standard
-    case palette(UInt8)
-    case rgb(UInt8, UInt8, UInt8)
-}
-
-public struct CellStyle: Sendable, Equatable, Hashable {
-    public var foreground = TerminalColor.standard
-    public var background = TerminalColor.standard
-    public var bold = false
-    public var dim = false
-    public var underline = false
-    public var inverse = false
-
-    public init() {}
-}
-
-public struct TerminalCell: Sendable, Equatable {
-    public var character: Character = " "
-    public var style = CellStyle()
-    /// A wide glyph occupies this cell and a trailing continuation cell.
-    public var isContinuation = false
-
-    public init() {}
-}
-
 /// A small VT100/xterm screen model.
 ///
 /// It covers what Mole's shell menus and the Bubble Tea programs emit. It serves two

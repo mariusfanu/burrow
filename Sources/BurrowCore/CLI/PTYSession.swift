@@ -2,17 +2,6 @@ import CPTY
 import Darwin
 import Foundation
 
-public enum PTYError: Error, LocalizedError {
-    case spawnFailed(Int32)
-
-    public var errorDescription: String? {
-        switch self {
-        case .spawnFailed(let code):
-            "Could not start the command: \(String(cString: strerror(code)))"
-        }
-    }
-}
-
 /// Closes the terminal only once the sources watching it are done with it, as libdispatch
 /// requires, so that the number can't be reused while one is still being torn down.
 /// Used only on the session's queue.

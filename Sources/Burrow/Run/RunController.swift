@@ -125,6 +125,7 @@ final class RunController {
             return
         }
         do {
+            try CLILocator.checkLaunchPath(cli.executable)
             let terminal = try CLITerminal(
                 executable: cli.executable,
                 arguments: arguments,

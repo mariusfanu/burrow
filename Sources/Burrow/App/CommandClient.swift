@@ -5,9 +5,11 @@ import Foundation
 /// completions deterministically without running maintenance on the host Mac.
 struct CommandClient: Sendable {
     var run: @Sendable (String, [String], TimeInterval?) async throws -> CommandResult = {
-        try await CommandRunner.run(executable: $0, arguments: $1, timeout: $2)
+        try CLILocator.checkLaunchPath($0)
+        return try await CommandRunner.run(executable: $0, arguments: $1, timeout: $2)
     }
     var stream: @Sendable (String, [String], @escaping @Sendable (Data) -> Void) async throws -> Int32 = {
-        try await CommandRunner.stream(executable: $0, arguments: $1, onStdout: $2)
+        try CLILocator.checkLaunchPath($0)
+        return try await CommandRunner.stream(executable: $0, arguments: $1, onStdout: $2)
     }
 }

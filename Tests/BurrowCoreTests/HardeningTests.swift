@@ -113,6 +113,22 @@ struct CLITrustTests {
         #expect(!CLILocator.isSafeToRun("/nonexistent/mo"))
     }
 
+    @Test func aTrustedLeafIsRefusedThroughAReplaceableDirectoryOrSymlink() throws {
+        let fileManager = FileManager.default
+        let folder = URL(fileURLWithPath: TestScratch.root).appendingPathComponent(UUID().uuidString)
+        let replaceable = folder.appendingPathComponent("replaceable")
+        let leaf = replaceable.appendingPathComponent("mo")
+        try fileManager.createDirectory(at: replaceable, withIntermediateDirectories: true)
+        try "#!/bin/sh\n".write(to: leaf, atomically: true, encoding: .utf8)
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: leaf.path)
+        let link = folder.appendingPathComponent("alias")
+        try fileManager.createSymbolicLink(atPath: link.path, withDestinationPath: "replaceable/mo")
+        #expect(CLILocator.isSafeToRun(link.path))
+        try fileManager.setAttributes([.posixPermissions: 0o777], ofItemAtPath: replaceable.path)
+        #expect(!CLILocator.isSafeToRun(leaf.path))
+        #expect(!CLILocator.isSafeToRun(link.path))
+    }
+
     @Test func systemToolsComeFirstOnPath() throws {
         let path = try #require(CLILocator.environment(base: ["PATH": "/evil/bin:/usr/bin"])["PATH"])
         let parts = path.split(separator: ":").map(String.init)

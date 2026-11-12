@@ -63,13 +63,54 @@ public enum CLILocator {
         return nil
     }
 
-    /// Skips a program that another account could have changed, since discovery runs each
-    /// candidate and whichever is chosen receives passwords. Follows symlinks.
+    /// Check each path component, including intermediate symlink destinations.
     static func isSafeToRun(_ path: String) -> Bool {
-        var info = stat()
-        guard stat(path, &info) == 0 else { return false }
-        let ownerIsTrusted = info.st_uid == 0 || info.st_uid == getuid()
-        return ownerIsTrusted && info.st_mode & (S_IWGRP | S_IWOTH) == 0
+        guard path.hasPrefix("/"), !path.utf8.contains(0) else { return false }
+        var pending = Array(path.split(separator: "/").reversed())
+        var directory = ""
+        var links = 0
+        let user = getuid()
+        while let component = pending.popLast() {
+            if component == "." { continue }
+            if component == ".." {
+                directory = (directory as NSString).deletingLastPathComponent
+                if directory == "/" { directory = "" }
+                continue
+            }
+            let candidate = directory + "/" + component
+            var info = stat()
+            guard lstat(candidate, &info) == 0, info.st_uid == 0 || info.st_uid == user else { return false }
+            switch info.st_mode & S_IFMT {
+            case S_IFLNK:
+                links += 1
+                guard links <= 40, let target = try? FileManager.default.destinationOfSymbolicLink(atPath: candidate) else {
+                    return false
+                }
+                if target.hasPrefix("/") { directory = "" }
+                pending.append(contentsOf: target.split(separator: "/").reversed())
+            case S_IFDIR:
+                let writableByOthers = info.st_mode & S_IWOTH != 0
+                let writableByGroup = info.st_mode & S_IWGRP != 0
+                let sticky = info.st_mode & S_ISVTX != 0
+                // Homebrew's shared directories can be writable by the macOS admin group.
+                let brewAdmin = info.st_gid == 80 && ["/opt/homebrew", "/usr/local"].contains {
+                    candidate == $0 || candidate.hasPrefix($0 + "/")
+                }
+                guard sticky || (!writableByOthers && (!writableByGroup || brewAdmin)) else { return false }
+                directory = candidate
+            case S_IFREG:
+                return pending.isEmpty && info.st_mode & (S_IWGRP | S_IWOTH) == 0
+            default:
+                return false
+            }
+        }
+        return false
+    }
+
+    /// Recheck immediately before a command launched from the app. The chosen installation
+    /// and its wrapper code remain trusted for the duration of the run.
+    public static func checkLaunchPath(_ path: String) throws {
+        guard isSafeToRun(path) else { throw CommandError.unsafeExecutable }
     }
 
     /// Parses `mo --version`, which prints `Mole version x.y.z` and `Install: ...`.

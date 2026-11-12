@@ -28,6 +28,14 @@ struct HistoryPresentationTests {
         #expect(many.actionSummary.contains("2,145 removed") || many.actionSummary.contains("2.145 removed") || many.actionSummary.contains("2 145 removed"))
     }
 
+    @Test func historyDateParsesAllCLITimestampFormats() throws {
+        #expect(HistoryDate.parse("2026-11-01 23:39:10") != nil)
+        let compact = try #require(HistoryDate.parse("2026-11-01T23:39:10+0200"))
+        let separated = try #require(HistoryDate.parse("2026-11-01T23:39:10+02:00"))
+        #expect(compact == separated)
+        #expect(HistoryDate.parse("sometime") == nil)
+    }
+
     @Test func timestampsBecomeDatesAndUnreadableOnesStayAsWritten() throws {
         let dated = try session(#"{"command":"clean","started_at":"2026-11-05 00:00:39"}"#)
         let date = try #require(dated.startedDate)

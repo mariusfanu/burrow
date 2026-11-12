@@ -76,24 +76,36 @@ extension HistoryReport.Deletion {
 
 /// Reads the CLI's timestamps and writes them the way the Finder does.
 enum HistoryDate {
-    private static let formats = ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ssZ", "yyyy-MM-dd'T'HH:mm:ssXXXXX"]
-
-    static func parse(_ text: String) -> Date? {
+    // Formatters are safe to share once configured, and these are never changed again.
+    private static let parsers: [DateFormatter] = [
+        "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ssZ", "yyyy-MM-dd'T'HH:mm:ssXXXXX",
+    ].map { format in
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        for format in formats {
-            formatter.dateFormat = format
-            if let date = formatter.date(from: text) { return date }
+        // Autoupdating, so a time-zone change while the app runs is honored as it was before.
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateFormat = format
+        return formatter
+    }
+
+    private static let display: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .autoupdatingCurrent
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        formatter.doesRelativeDateFormatting = true
+        return formatter
+    }()
+
+    static func parse(_ text: String) -> Date? {
+        for parser in parsers {
+            if let date = parser.date(from: text) { return date }
         }
         return nil
     }
 
     static func text(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        formatter.doesRelativeDateFormatting = true
-        return formatter.string(from: date)
+        display.string(from: date)
     }
 }

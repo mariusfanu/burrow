@@ -31,7 +31,7 @@ struct UninstallView: View {
             }
         }
         .animation(Motion.glide, value: model.state)
-        .task(loadIfNeeded)
+        .task(id: cli) { await loadIfNeeded() }
     }
 
     private func load() {

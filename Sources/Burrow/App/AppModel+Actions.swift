@@ -20,7 +20,10 @@ extension AppModel {
                 if preview {
                     return PageAction(title: "Preview Cleanup", isEnabled: hasWork) { self.clean.clean(cli: cli, preview: true) }
                 }
-                return PageAction(title: "Clean \(potential.fileSize)…", symbol: "sparkles", isEnabled: hasWork) { self.clean.isConfirming = true }
+                return PageAction(title: "Clean \(potential.fileSize)…", symbol: "sparkles", isEnabled: hasWork) {
+                    guard self.cli == cli, self.clean.state == .review else { return }
+                    self.clean.isConfirming = true
+                }
             case .running:
                 return doneAction(clean.run) { self.clean.finishRun() }
             }
@@ -55,7 +58,10 @@ extension AppModel {
                     return PageAction(title: "Preview Maintenance") { self.optimize.runMaintenance(cli: cli, preview: true) }
                 }
                 guard optimize.errorMessage == nil else { return nil }
-                return PageAction(title: "Run Maintenance…") { self.optimize.isConfirming = true }
+                return PageAction(title: "Run Maintenance…") {
+                    guard self.cli == cli, self.optimize.state == .review else { return }
+                    self.optimize.isConfirming = true
+                }
             case .running:
                 return doneAction(optimize.run) { self.optimize.finishRun(cli: cli) }
             }

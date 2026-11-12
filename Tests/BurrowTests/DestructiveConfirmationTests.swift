@@ -93,8 +93,7 @@ struct UninstallPlanGuardTests {
         #expect(!FileManager.default.fileExists(atPath: directory + "/removed"))
     }
 
-    private func loaded(cli: CLIInfo) async throws -> UninstallModel {
-        let commands = ScriptedCommands()
+    private func loaded(cli: CLIInfo, commands: ScriptedCommands = ScriptedCommands()) async throws -> UninstallModel {
         let model = UninstallModel(
             policy: .live,
             commands: commands.client,
@@ -127,7 +126,8 @@ struct UninstallPlanGuardTests {
 
     @Test func aStoppedAttemptDoesntPassItsOptionsToTheNextRemoval() async throws {
         let (cli, directory) = try fakeCLI(planning: "/Applications/Xcode.app")
-        let model = try await loaded(cli: cli)
+        let commands = ScriptedCommands()
+        let model = try await loaded(cli: cli, commands: commands)
         model.selection = ["/Applications/Xcode-beta.app"]
         model.deletePermanently = true
         model.includePersonalData = true
@@ -142,6 +142,10 @@ struct UninstallPlanGuardTests {
         #expect(!model.deletePermanently)
         #expect(!model.includePersonalData)
         #expect(model.activeOptionsNotice == nil)
+        model.load(cli: cli)
+        try await eventually { await commands.runs.count == 2 }
+        await commands.completeRun(1, stdout: listJSON)
+        try await eventually { model.state == .list }
         model.selection = ["/Applications/Xcode-beta.app"]
         model.beginRemoval(cli: cli, preview: false)
         #expect(!model.run.isIrreversible)

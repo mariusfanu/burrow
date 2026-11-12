@@ -22,12 +22,19 @@ final class CleanModel {
     var isChoosingVolume = false
     var isConfirming = false
     /// The volume waiting on the confirmation that a real cleanup requires.
-    var volumeAwaitingConfirmation: String?
+    private(set) var volumeAwaitingConfirmation: String?
+    private var volumeConfirmationCLI: CLIInfo?
+    private var reviewCLI: CLIInfo?
 
     /// Whether the external-volume question is on screen. Dismissing it forgets the volume.
     var isConfirmingExternalClean: Bool {
         get { volumeAwaitingConfirmation != nil }
-        set { if !newValue { volumeAwaitingConfirmation = nil } }
+        set {
+            if !newValue {
+                volumeAwaitingConfirmation = nil
+                volumeConfirmationCLI = nil
+            }
+        }
     }
 
 
@@ -56,6 +63,7 @@ final class CleanModel {
 
     /// Runs `mo clean --dry-run`, then reads the path list it writes.
     func scan(cli: CLIInfo) {
+        reviewCLI = nil
         let id = UUID()
         scanID = id
         scanTask?.cancel()
@@ -98,6 +106,7 @@ final class CleanModel {
                     report = finished
                     protectedThisSession = []
                     scanActivity = ""
+                    reviewCLI = cli
                     state = .review
                 }
             } catch is CancellationError {
@@ -137,6 +146,7 @@ final class CleanModel {
 
     /// Runs the real cleanup. The CLI itself raises any admin question.
     func clean(cli: CLIInfo, preview: Bool) {
+        guard state == .review, reviewCLI == cli else { return }
         state = .running
         run.start(
             title: preview ? "Previewing Cleanup" : "Cleaning",
@@ -156,11 +166,12 @@ final class CleanModel {
             return
         }
         volumeAwaitingConfirmation = path
+        volumeConfirmationCLI = cli
     }
 
     func confirmExternalClean(cli: CLIInfo) {
-        guard let path = volumeAwaitingConfirmation else { return }
-        volumeAwaitingConfirmation = nil
+        guard let path = volumeAwaitingConfirmation, volumeConfirmationCLI == cli else { return }
+        isConfirmingExternalClean = false
         isChoosingVolume = false
         cleanExternal(path: path, cli: cli, preview: false)
     }
@@ -176,6 +187,17 @@ final class CleanModel {
     func finishRun() {
         run.reset()
         state = .idle
+    }
+
+    func invalidateReview() {
+        isConfirming = false
+        isConfirmingExternalClean = false
+        isChoosingVolume = false
+        reviewCLI = nil
+        guard state != .running else { return }
+        cancelScan()
+        report = CleanReport()
+        errorMessage = nil
     }
 
     /// Adds a path to the CLI's whitelist so that cleanup leaves it alone.

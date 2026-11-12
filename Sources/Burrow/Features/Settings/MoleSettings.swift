@@ -70,7 +70,7 @@ struct MoleSettings: View {
             }
         }
         .formStyle(.grouped)
-        .task(refresh)
+        .task(id: app.cli) { await refresh() }
         .sheet(isPresented: $manage.isRunPresented) {
             RunPanel(run: manage.run, isSheet: true, close: closeRun)
                 .frame(width: 560, height: 460)

@@ -200,31 +200,55 @@ final class AppModel {
     }
 
     func locateCLI() async {
+        await discoverCLI(customPath: customCLIPath, requiresExactPath: false)
+    }
+
+    func useCustomCLI(path: String) async {
+        await discoverCLI(customPath: path, requiresExactPath: true)
+    }
+
+    private func discoverCLI(customPath: String?, requiresExactPath: Bool) async {
         guard !isShuttingDown else { return }
         let id = UUID()
         discoveryID = id
         isLocating = true
-        let found = await locator(customCLIPath)
+        var found = await locator(customPath)
         guard discoveryID == id, !Task.isCancelled, !isShuttingDown else { return }
-        cli = found
-        #if DEBUG
-        if environment["BURROW_NO_CLI"] == "1" { cli = nil }
-        #endif
         isLocating = false
+        if requiresExactPath, let customPath {
+            guard found?.executable == customPath else {
+                cliChoiceError = "\(customPath.lastPathComponent) couldn’t be used. It isn’t a working copy of Mole, or another account can change it."
+                return
+            }
+            self.customCLIPath = customPath
+            defaults?.set(customPath, forKey: CLILocator.customPathKey)
+            cliChoiceError = nil
+        }
+        #if DEBUG
+        if environment["BURROW_NO_CLI"] == "1" { found = nil }
+        #endif
+        if cli != found {
+            if found == nil, allRuns.contains(where: \.isRunning) { return }
+            if cli != nil { invalidateCLIResults() }
+            cli = found
+        }
         updateStatusStream()
         #if DEBUG
         if let cli { DebugDriver.runIfRequested(model: self, cli: cli) }
         #endif
     }
 
-    func useCustomCLI(path: String) async {
-        customCLIPath = path
-        defaults?.set(path, forKey: CLILocator.customPathKey)
-        await locateCLI()
-        guard customCLIPath == path, !isLocating else { return }
-        cliChoiceError = cli?.executable == path
-            ? nil
-            : "\(path.lastPathComponent) couldn’t be used. It isn’t a working copy of Mole, or another account can change it."
+    private func invalidateCLIResults() {
+        clean.invalidateReview()
+        optimize.invalidateReview()
+        uninstall.invalidateInventory()
+        for flow in [purge, installers, slim] {
+            flow.isEditingPaths = false
+            if flow.state != .running { flow.abandonSelection() }
+        }
+        analyze.invalidateCLIResults()
+        history.invalidateCLIResults()
+        manage.invalidateCLIResults()
     }
 
     func setWindowVisible(_ visible: Bool) {

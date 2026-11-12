@@ -99,6 +99,15 @@ final class AnalyzeModel {
         cache.removeAll()
     }
 
+    func invalidateCLIResults() {
+        cancelScan()
+        resetInteraction()
+        levels = []
+        cache.removeAll()
+        presentation = nil
+        noticeMessage = nil
+    }
+
     /// A list selection can land on a protected row, and then there's no Move to Trash to
     /// offer, so this says why.
     func noteSelection(added: Set<String>) {

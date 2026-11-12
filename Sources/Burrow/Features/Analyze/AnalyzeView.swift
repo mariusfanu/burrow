@@ -24,7 +24,7 @@ struct AnalyzeView: View {
                     .help("Go to the enclosing folder")
             }
         }
-        .task(start)
+        .task(id: cli) { await start() }
         .onAppear { model.undoManager = undoManager }
         .onChange(of: model.noticeMessage) { Announcer.say(model.noticeMessage) }
         .onChange(of: model.errorMessage) { Announcer.say(model.errorMessage) }

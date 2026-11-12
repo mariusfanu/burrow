@@ -25,6 +25,12 @@ final class HistoryModel {
         isLoading = false
     }
 
+    func invalidateCLIResults() {
+        cancelLoading()
+        report = nil
+        errorMessage = nil
+    }
+
     func load(cli: CLIInfo) {
         let id = UUID()
         loadID = id

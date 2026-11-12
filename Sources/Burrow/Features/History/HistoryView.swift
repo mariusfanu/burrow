@@ -46,7 +46,7 @@ struct HistoryView: View {
                 .help("Filter the history or find its log files")
             }
         }
-        .task(load)
+        .task(id: cli) { await load() }
     }
 
     @Sendable

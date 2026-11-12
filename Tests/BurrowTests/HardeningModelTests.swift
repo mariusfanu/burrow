@@ -270,7 +270,8 @@ struct PreviewToggleTests {
     @Test func aRealRunBlocksTurningPreviewOn() async {
         let model = model()
         #expect(model.isPreviewToggleEnabled)
-        model.clean.clean(cli: sleeperCLI, preview: false)
+        model.clean.requestExternalClean(path: "/Volumes/Fixture", cli: sleeperCLI, preview: false)
+        model.clean.confirmExternalClean(cli: sleeperCLI)
         #expect(model.hasWorkChangingTheMac)
         #expect(!model.isPreviewToggleEnabled)
         #expect(model.previewToggleHelp.contains("Finish or cancel"))

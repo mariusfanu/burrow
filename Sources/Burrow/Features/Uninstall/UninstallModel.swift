@@ -65,6 +65,7 @@ final class UninstallModel {
     private let home: String
     private var isStale = false
     private var loadTask: Task<Void, Never>?
+    private var inventoryCLI: CLIInfo?
     private var sizeTask: Task<Void, Never>?
     private var loadID = UUID()
     private var measurementID = UUID()
@@ -163,6 +164,7 @@ final class UninstallModel {
     }
 
     func load(cli: CLIInfo) {
+        inventoryCLI = nil
         isStale = false
         let id = UUID()
         loadID = id
@@ -190,6 +192,7 @@ final class UninstallModel {
                         return first == second ? byName($0, $1) : first < second
                     }
                     selection.formIntersection(Set(list.map(\.id)))
+                    inventoryCLI = cli
                     state = .list
                 }
                 measureSizes(list, wasInteractedWith: false)
@@ -294,6 +297,7 @@ final class UninstallModel {
     /// which the run panel relays as a native confirmation. The CLI takes names, not
     /// locations, so that question only appears if its plan names exactly the chosen apps.
     func beginRemoval(cli: CLIInfo, preview: Bool) {
+        guard state == .list, inventoryCLI == cli else { return }
         let chosen = selectedApps
         guard !chosen.isEmpty else { return }
         let terms = UninstallTargeting.terms(for: chosen, among: apps)
@@ -374,5 +378,19 @@ final class UninstallModel {
         // These widen what a removal does, so they never carry over to the next one.
         clearRemovalOptions()
         load(cli: cli)
+    }
+
+    func invalidateInventory() {
+        inventoryCLI = nil
+        guard state != .running else { return }
+        cancelLoading()
+        clearRemovalOptions()
+        apps = []
+        orderedApps = []
+        selection = []
+        sizes = [:]
+        sizeStates = [:]
+        errorMessage = nil
+        state = .idle
     }
 }

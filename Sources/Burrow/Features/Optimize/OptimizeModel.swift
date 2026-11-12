@@ -22,6 +22,7 @@ final class OptimizeModel {
     let run: RunController
     private var task: Task<Void, Never>?
     private var previewID = UUID()
+    private var reviewCLI: CLIInfo?
     private let commands: CommandClient
 
     init(commands: CommandClient = CommandClient(), policy: ExecutionPolicy) {
@@ -31,6 +32,7 @@ final class OptimizeModel {
 
     /// Parses `mo optimize --dry-run`.
     func preview(cli: CLIInfo) {
+        reviewCLI = nil
         let id = UUID()
         previewID = id
         task?.cancel()
@@ -67,6 +69,7 @@ final class OptimizeModel {
                         errorMessage = "Some maintenance checks failed. Review the results and check again before running maintenance."
                     }
                     state = .review
+                    reviewCLI = cli
                 }
             } catch is CancellationError {
                 if previewID == id { state = .idle }
@@ -102,7 +105,7 @@ final class OptimizeModel {
     }
 
     func runMaintenance(cli: CLIInfo, preview: Bool) {
-        guard preview || (state == .review && errorMessage == nil) else { return }
+        guard preview || (state == .review && reviewCLI == cli && errorMessage == nil) else { return }
         state = .running
         run.start(
             title: preview ? "Previewing Maintenance" : "Running Maintenance",
@@ -116,5 +119,14 @@ final class OptimizeModel {
     func finishRun(cli: CLIInfo) {
         run.reset()
         preview(cli: cli)
+    }
+
+    func invalidateReview() {
+        isConfirming = false
+        reviewCLI = nil
+        guard state != .running else { return }
+        cancelPreview()
+        lines = []
+        errorMessage = nil
     }
 }

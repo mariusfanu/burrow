@@ -17,6 +17,32 @@ private actor Discoveries {
 
 @MainActor
 struct AppCoordinationTests {
+    @Test func aCleanReviewCannotLaunchAReplacementCLI() async throws {
+        let (original, _) = try makeScript("#!/bin/bash\nprintf 'Potential space: 1GB · 1 item\\n'\n")
+        let (replacement, directory) = try makeScript("#!/bin/bash\n: > \"$(dirname \"$0\")/launched\"\n")
+        let model = AppModel(defaults: nil, environment: [:], locator: { path in
+            path == replacement.executable ? replacement : original
+        })
+        await model.locateCLI()
+        model.selection = .clean
+        model.clean.scan(cli: original)
+        try await eventually { model.clean.state == .review }
+        #expect(model.clean.report.potentialBytes == 1_000_000_000)
+        let staleAction = try #require(model.primaryAction)
+        await model.useCustomCLI(path: "/unavailable/mo")
+        #expect(model.cli == original)
+        #expect(model.clean.state == .review)
+        #expect(model.cliChoiceError != nil)
+        await model.useCustomCLI(path: replacement.executable)
+        #expect(model.cli == replacement)
+        staleAction.perform()
+        model.clean.clean(cli: replacement, preview: false)
+        if let terminal = model.clean.run.terminal { _ = await terminal.waitForExit() }
+        #expect(model.clean.state == .idle)
+        #expect(!model.clean.isConfirming)
+        #expect(!FileManager.default.fileExists(atPath: directory + "/launched"))
+    }
+
     @Test func onlyTheLatestDiscoveryCanPublishAndClearLoading() async throws {
         let discoveries = Discoveries()
         let model = AppModel(defaults: nil, environment: [:], locator: { await discoveries.locate($0) })
@@ -39,7 +65,8 @@ struct AppCoordinationTests {
         let model = AppModel(defaults: nil, environment: [:], locator: { _ in sleeperCLI })
         await model.locateCLI()
         model.selection = .clean
-        model.clean.clean(cli: sleeperCLI, preview: false)
+        model.clean.requestExternalClean(path: "/Volumes/Fixture", cli: sleeperCLI, preview: false)
+        model.clean.confirmExternalClean(cli: sleeperCLI)
         #expect(model.clean.run.isRunning)
         #expect(model.reloadAction == nil)
         #expect(model.cancellationAction != nil)

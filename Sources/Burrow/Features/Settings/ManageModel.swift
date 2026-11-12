@@ -32,6 +32,13 @@ final class ManageModel {
         }
     }
 
+    func invalidateCLIResults() {
+        refreshID = UUID()
+        touchIDStatus = ""
+        touchIDEnabled = nil
+        isConfirmingRemove = false
+    }
+
     /// Runs a command in the sheet, with its prompts relayed by the run panel.
     func perform(title: String, arguments: [String], cli: CLIInfo, showsTerminal: Bool = false) {
         run.start(title: title, cli: cli, arguments: arguments, showsTerminal: showsTerminal)

@@ -1,4 +1,3 @@
-import Darwin
 import Foundation
 
 /// Decides which allowed paths deserve a second look before they go to the Trash.
@@ -31,9 +30,7 @@ public struct TrashRisk: Sendable {
     public init(home: String = NSHomeDirectory()) {
         // Both homes count, as in `TrashGuard`, because `HOME` can be overridden.
         var candidates = [home]
-        if let entry = getpwuid(getuid()), let directory = entry.pointee.pw_dir {
-            candidates.append(String(cString: directory))
-        }
+        if let accountHome = accountHomeDirectory() { candidates.append(accountHome) }
         var roots: [String] = []
         for candidate in candidates {
             for root in [candidate, URL(fileURLWithPath: candidate).resolvingSymlinksInPath().path] {

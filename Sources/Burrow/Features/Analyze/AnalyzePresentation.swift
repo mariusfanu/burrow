@@ -29,24 +29,17 @@ struct AnalyzePresentation: Sendable {
         )
     }
 
-    static func trashRisks(_ entries: [AnalyzeResult.Entry], home: String) -> [String: TrashRisk.Reason] {
+    static func trashRisks(_ entries: [AnalyzeResult.Entry], home: String) throws -> [String: TrashRisk.Reason] {
         let risk = TrashRisk(home: home)
         var reasons: [String: TrashRisk.Reason] = [:]
         for entry in entries {
+            try Task.checkCancellation()
             reasons[entry.path] = risk.reason(forPath: entry.path, isDirectory: entry.isDir)
         }
         return reasons
     }
 
-    static func protectedPaths(_ entries: [AnalyzeResult.Entry], home: String) -> Set<String> {
-        let guardrail = TrashGuard(home: home)
-        return Set(entries.compactMap { entry in
-            do {
-                try guardrail.validate(entry.path)
-                return nil
-            } catch {
-                return entry.path
-            }
-        })
+    static func protectedPaths(_ entries: [AnalyzeResult.Entry], home: String) throws -> Set<String> {
+        try TrashGuard(home: home).protectedPaths(entries.lazy.map(\.path))
     }
 }

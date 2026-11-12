@@ -49,9 +49,7 @@ public struct TrashGuard: Sendable {
         // Both homes count, as in Go: an overridden HOME must not expose the real one.
         var roots: [String] = []
         var candidates = [home]
-        if let entry = getpwuid(getuid()), let directory = entry.pointee.pw_dir {
-            candidates.append(String(cString: directory))
-        }
+        if let accountHome = accountHomeDirectory() { candidates.append(accountHome) }
         for candidate in candidates {
             let cleaned = Self.clean(candidate)
             if !roots.contains(cleaned) { roots.append(cleaned) }
@@ -61,107 +59,208 @@ public struct TrashGuard: Sendable {
         homeRoots = roots
     }
 
-    /// Returns normally when the path may be trashed.
+    /// Returns normally when the path may be trashed. All filesystem reads are fresh.
     public func validate(_ path: String) throws {
-        guard !path.isEmpty else { throw Refusal.invalidPath("it is empty") }
-        guard path.hasPrefix("/") else { throw Refusal.invalidPath("it must be absolute") }
-        guard !path.contains("\0") else { throw Refusal.invalidPath("it contains a null byte") }
-        guard !path.split(separator: "/", omittingEmptySubsequences: false).contains("..") else {
-            throw Refusal.invalidPath("it contains a parent-directory step")
-        }
-        if isProtected(path) { throw Refusal.protected(path) }
-        let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
-        if resolved != path, isProtected(resolved) { throw Refusal.protected(path) }
+        var inspection = Inspection(homeRoots: homeRoots, cache: nil)
+        try inspection.validate(path)
     }
 
     public func isProtected(_ path: String) -> Bool {
-        guard !path.isEmpty else { return false }
-        let cleanPath = Self.clean(path)
-        if Self.isEndpointSecurityCachePath(cleanPath) { return true }
-        if Self.isCriticalPath(cleanPath) { return true }
+        var inspection = Inspection(homeRoots: homeRoots, cache: nil)
+        return inspection.isProtected(path)
+    }
 
-        for home in homeRoots {
-            if cleanPath == home || Self.isSameExistingPath(cleanPath, home) { return true }
+    /// A display snapshot. Each actual move must call validate again.
+    public func protectedPaths(_ paths: some Sequence<String>) throws -> Set<String> {
+        var inspection = Inspection(homeRoots: homeRoots, cache: Inspection.Cache())
+        var protected: Set<String> = []
+        for path in paths {
+            try Task.checkCancellation()
+            do { try inspection.validate(path) }
+            catch { protected.insert(path) }
+        }
+        return protected
+    }
 
-            let dockerState = home + "/Library/Containers/com.docker.docker"
-            if Self.touchesRuntimeRoot(cleanPath, dockerState) { return true }
+    private struct Inspection {
+        struct Cache {
+            var metadata: [String: FileMetadata?] = [:]
+            var roots: [String: String?] = [:]
+            var orbStackRoots: [String: [String]] = [:]
+            var ancestorIdentities: [String: Set<FileIdentity>] = [:]
+        }
 
-            let orbstackState = home + "/.orbstack"
-            if Self.touchesRuntimeRoot(cleanPath, orbstackState) { return true }
+        let homeRoots: [String]
+        var cache: Cache?
 
-            if Self.isICloudStructuralPath(cleanPath, home: home) { return true }
+        /// Returns normally when the path may be trashed.
+        mutating func validate(_ path: String) throws {
+            guard !path.isEmpty else { throw Refusal.invalidPath("it is empty") }
+            guard path.hasPrefix("/") else { throw Refusal.invalidPath("it must be absolute") }
+            guard !path.contains("\0") else { throw Refusal.invalidPath("it contains a null byte") }
+            guard !path.split(separator: "/", omittingEmptySubsequences: false).contains("..") else {
+                throw Refusal.invalidPath("it contains a parent-directory step")
+            }
+            if isProtected(path) { throw Refusal.protected(path) }
+            let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+            if resolved != path, isProtected(resolved) { throw Refusal.protected(path) }
+        }
 
-            let groupContainers = home + "/Library/Group Containers"
-            if let entries = try? FileManager.default.contentsOfDirectory(atPath: groupContainers) {
-                for entry in entries where entry.lowercased().hasSuffix("dev.orbstack") {
-                    let stateRoot = groupContainers + "/" + entry
-                    if Self.isPathWithinExistingRoot(cleanPath, stateRoot)
-                        || Self.containsProtectedRoot(cleanPath, stateRoot) {
+        mutating func isProtected(_ path: String) -> Bool {
+            guard !path.isEmpty else { return false }
+            let cleanPath = TrashGuard.clean(path)
+            if TrashGuard.isEndpointSecurityCachePath(cleanPath) { return true }
+            if isCriticalPath(cleanPath) { return true }
+
+            for home in homeRoots {
+                if cleanPath == home || isSameExistingPath(cleanPath, home) { return true }
+
+                let dockerState = home + "/Library/Containers/com.docker.docker"
+                if touchesRuntimeRoot(cleanPath, dockerState) { return true }
+
+                let orbstackState = home + "/.orbstack"
+                if touchesRuntimeRoot(cleanPath, orbstackState) { return true }
+
+                if isICloudStructuralPath(cleanPath, home: home) { return true }
+
+                let groupContainers = home + "/Library/Group Containers"
+                for root in orbStackRoots(in: groupContainers) {
+                    if isPathWithinExistingRoot(cleanPath, root) || containsProtectedRoot(cleanPath, root) {
                         return true
                     }
                 }
+                let lowerContainers = groupContainers.lowercased() + "/"
+                let lowerPath = cleanPath.lowercased()
+                if lowerPath.hasPrefix(lowerContainers) {
+                    let relative = lowerPath.dropFirst(lowerContainers.count)
+                    let container = relative.split(separator: "/").first.map(String.init) ?? ""
+                    if container.hasSuffix("dev.orbstack") { return true }
+                }
             }
-            let lowerContainers = groupContainers.lowercased() + "/"
-            let lowerPath = cleanPath.lowercased()
-            if lowerPath.hasPrefix(lowerContainers) {
-                let relative = lowerPath.dropFirst(lowerContainers.count)
-                let container = relative.split(separator: "/").first.map(String.init) ?? ""
-                if container.hasSuffix("dev.orbstack") { return true }
+            return false
+        }
+
+        private mutating func touchesRuntimeRoot(_ path: String, _ root: String) -> Bool {
+            path == root || path.hasPrefix(root + "/")
+                || isPathWithinExistingRoot(path, root)
+                || containsProtectedRoot(path, root)
+        }
+
+        private mutating func isCriticalPath(_ path: String) -> Bool {
+            for root in TrashGuard.criticalRoots {
+                if path == root || isSameExistingPath(path, root) { return true }
+            }
+            if isDirectChildOfExistingRoot(path, "/Users") { return true }
+            for root in TrashGuard.protectedTrees {
+                if path.hasPrefix(root + "/") || isPathWithinExistingRoot(path, root) { return true }
+            }
+            return false
+        }
+
+        /// Mirrors `isICloudStructuralPath`: Mobile Documents, each container in it and a
+        /// container's Documents folder. Trashing one removes that store on every device.
+        private mutating func isICloudStructuralPath(_ path: String, home: String) -> Bool {
+            let mobileDocuments = home + "/Library/Mobile Documents"
+            // A recursive move of an existing ancestor includes the same protected stores.
+            if containsProtectedRoot(path, mobileDocuments) { return true }
+            // These are directory boundaries, not reserved names for ordinary files.
+            if let info = metadata(path), (info.mode & S_IFMT) != S_IFDIR { return false }
+
+            let lowerRoot = mobileDocuments.lowercased()
+            let lowerPath = path.lowercased()
+            if lowerPath == lowerRoot { return true }
+            guard lowerPath.hasPrefix(lowerRoot + "/") else {
+                return isICloudStructuralByIdentity(path, mobileDocuments)
+            }
+            let parts = lowerPath.dropFirst(lowerRoot.count + 1).split(separator: "/")
+            switch parts.count {
+            case 1: return true
+            case 2: return parts[1] == "documents"
+            default: return false
             }
         }
-        return false
-    }
 
-    private static func touchesRuntimeRoot(_ path: String, _ root: String) -> Bool {
-        path == root || path.hasPrefix(root + "/")
-            || isPathWithinExistingRoot(path, root)
-            || containsProtectedRoot(path, root)
-    }
-
-    private static func isCriticalPath(_ path: String) -> Bool {
-        for root in criticalRoots where path == root || isSameExistingPath(path, root) {
-            return true
+        /// Applies the same depth rule when the path names Mobile Documents another way,
+        /// such as through `/System/Volumes/Data` or a symlinked parent.
+        private mutating func isICloudStructuralByIdentity(_ path: String, _ mobileDocuments: String) -> Bool {
+            guard fileIdentity(mobileDocuments) != nil else { return false }
+            if isSameExistingPath(path, mobileDocuments) { return true }
+            let parent = TrashGuard.parentPath(path)
+            if isSameExistingPath(parent, mobileDocuments) { return true }
+            return (path as NSString).lastPathComponent.lowercased() == "documents"
+                && isSameExistingPath(TrashGuard.parentPath(parent), mobileDocuments)
         }
-        if isDirectChildOfExistingRoot(path, "/Users") { return true }
-        for root in protectedTrees where path.hasPrefix(root + "/") || isPathWithinExistingRoot(path, root) {
-            return true
-        }
-        return false
-    }
 
-    /// Mirrors `isICloudStructuralPath`: Mobile Documents, each container in it and a
-    /// container's Documents folder. Trashing one removes that store on every device.
-    private static func isICloudStructuralPath(_ path: String, home: String) -> Bool {
-        let mobileDocuments = home + "/Library/Mobile Documents"
-        // A recursive move of an existing ancestor includes the same protected stores.
-        if containsProtectedRoot(path, mobileDocuments) { return true }
-        // These are directory boundaries, not reserved names for ordinary files.
-        var info = stat()
-        if stat(path, &info) == 0, (info.st_mode & S_IFMT) != S_IFDIR { return false }
-
-        let lowerRoot = mobileDocuments.lowercased()
-        let lowerPath = path.lowercased()
-        if lowerPath == lowerRoot { return true }
-        guard lowerPath.hasPrefix(lowerRoot + "/") else {
-            return isICloudStructuralByIdentity(path, mobileDocuments)
+        private mutating func containsProtectedRoot(_ path: String, _ root: String) -> Bool {
+            guard let resolved = existingRoot(root) else { return false }
+            if isPathWithinExistingRoot(resolved, path) { return true }
+            return isPathWithinExistingRoot(root, path)
         }
-        let parts = lowerPath.dropFirst(lowerRoot.count + 1).split(separator: "/")
-        switch parts.count {
-        case 1: return true
-        case 2: return parts[1] == "documents"
-        default: return false
-        }
-    }
 
-    /// Applies the same depth rule when the path names Mobile Documents another way,
-    /// such as through `/System/Volumes/Data` or a symlinked parent.
-    private static func isICloudStructuralByIdentity(_ path: String, _ mobileDocuments: String) -> Bool {
-        guard fileIdentity(mobileDocuments) != nil else { return false }
-        if isSameExistingPath(path, mobileDocuments) { return true }
-        let parent = parentPath(path)
-        if isSameExistingPath(parent, mobileDocuments) { return true }
-        return (path as NSString).lastPathComponent.lowercased() == "documents"
-            && isSameExistingPath(parentPath(parent), mobileDocuments)
+        private mutating func isPathWithinExistingRoot(_ path: String, _ root: String) -> Bool {
+            guard let rootID = fileIdentity(root) else { return false }
+            if cache != nil { return identitiesAlongPath(path).contains(rootID) }
+            var current = TrashGuard.clean(path)
+            while true {
+                if fileIdentity(current) == rootID { return true }
+                let parent = TrashGuard.parentPath(current)
+                if parent == current { return false }
+                current = parent
+            }
+        }
+
+        private mutating func identitiesAlongPath(_ path: String) -> Set<FileIdentity> {
+            if let identities = cache?.ancestorIdentities[path] { return identities }
+            var identities: Set<FileIdentity> = []
+            var current = TrashGuard.clean(path)
+            while true {
+                if let identity = fileIdentity(current) { identities.insert(identity) }
+                let parent = TrashGuard.parentPath(current)
+                if parent == current { break }
+                current = parent
+            }
+            cache?.ancestorIdentities[path] = identities
+            return identities
+        }
+
+        private mutating func isSameExistingPath(_ path: String, _ other: String) -> Bool {
+            guard let first = fileIdentity(path), let second = fileIdentity(other) else { return false }
+            return first == second
+        }
+
+        private mutating func isDirectChildOfExistingRoot(_ path: String, _ root: String) -> Bool {
+            let parent = TrashGuard.parentPath(path)
+            return path != TrashGuard.clean(root) && parent != path && isSameExistingPath(parent, root)
+        }
+
+        private mutating func fileIdentity(_ path: String) -> FileIdentity? {
+            metadata(path)?.identity
+        }
+
+        private mutating func metadata(_ path: String) -> FileMetadata? {
+            if let stored = cache?.metadata[path] { return stored }
+            var info = stat()
+            let found = stat(path, &info) == 0 ? FileMetadata(info) : nil
+            cache?.metadata[path] = .some(found)
+            return found
+        }
+
+        private mutating func existingRoot(_ path: String) -> String? {
+            if let stored = cache?.roots[path] { return stored }
+            var info = stat()
+            let resolved = lstat(path, &info) != 0 && errno == ENOENT
+                ? nil : URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+            cache?.roots[path] = .some(resolved)
+            return resolved
+        }
+
+        private mutating func orbStackRoots(in directory: String) -> [String] {
+            if let stored = cache?.orbStackRoots[directory] { return stored }
+            let entries = (try? FileManager.default.contentsOfDirectory(atPath: directory)) ?? []
+            let roots = entries.filter { $0.lowercased().hasSuffix("dev.orbstack") }.map { directory + "/" + $0 }
+            cache?.orbStackRoots[directory] = roots
+            return roots
+        }
     }
 
     private static func isEndpointSecurityCachePath(_ path: String) -> Bool {
@@ -175,44 +274,19 @@ public struct TrashGuard: Sendable {
         return endpointSecurityPrefixes.contains { lower.contains($0) }
     }
 
-    private static func containsProtectedRoot(_ path: String, _ root: String) -> Bool {
-        var info = stat()
-        if lstat(root, &info) != 0, errno == ENOENT { return false }
-        let resolved = URL(fileURLWithPath: root).resolvingSymlinksInPath().path
-        if isPathWithinExistingRoot(resolved, path) { return true }
-        return isPathWithinExistingRoot(root, path)
-    }
-
-    private static func isPathWithinExistingRoot(_ path: String, _ root: String) -> Bool {
-        guard let rootID = fileIdentity(root) else { return false }
-        var current = clean(path)
-        while true {
-            if fileIdentity(current) == rootID { return true }
-            let parent = parentPath(current)
-            if parent == current { return false }
-            current = parent
-        }
-    }
-
-    private static func isSameExistingPath(_ path: String, _ other: String) -> Bool {
-        guard let first = fileIdentity(path), let second = fileIdentity(other) else { return false }
-        return first == second
-    }
-
-    private static func isDirectChildOfExistingRoot(_ path: String, _ root: String) -> Bool {
-        let parent = parentPath(path)
-        return path != clean(root) && parent != path && isSameExistingPath(parent, root)
-    }
-
-    private struct FileIdentity: Equatable {
+    private struct FileIdentity: Hashable {
         let device: dev_t
         let inode: ino_t
     }
 
-    private static func fileIdentity(_ path: String) -> FileIdentity? {
-        var info = stat()
-        guard stat(path, &info) == 0 else { return nil }
-        return FileIdentity(device: info.st_dev, inode: info.st_ino)
+    private struct FileMetadata {
+        let identity: FileIdentity
+        let mode: mode_t
+
+        init(_ info: stat) {
+            identity = FileIdentity(device: info.st_dev, inode: info.st_ino)
+            mode = info.st_mode
+        }
     }
 
     private static func parentPath(_ path: String) -> String {

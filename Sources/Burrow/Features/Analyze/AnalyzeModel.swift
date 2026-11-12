@@ -53,14 +53,14 @@ final class AnalyzeModel {
     private var mutationTask: Task<Void, Never>?
     private var mutationCount = 0
     private(set) var isShuttingDown = false
-    private let evaluateProtection: @Sendable ([AnalyzeResult.Entry], String) -> Set<String>
+    private let evaluateProtection: @Sendable ([AnalyzeResult.Entry], String) throws -> Set<String>
 
     init(
         policy: ExecutionPolicy,
         commands: CommandClient = CommandClient(),
         trashClient: TrashClient = TrashClient(),
         home: String = AppModel.home,
-        evaluateProtection: @escaping @Sendable ([AnalyzeResult.Entry], String) -> Set<String> = AnalyzePresentation.protectedPaths
+        evaluateProtection: @escaping @Sendable ([AnalyzeResult.Entry], String) throws -> Set<String> = AnalyzePresentation.protectedPaths
     ) {
         self.policy = policy
         self.commands = commands
@@ -238,15 +238,21 @@ final class AnalyzeModel {
                 try output.requireSuccess()
                 let home = home
                 let evaluate = evaluateProtection
-                let prepared = try await Task.detached {
+                let preparation = Task.detached {
+                    try Task.checkCancellation()
                     let parsed = try AnalyzeResult.decode(Data(output.stdout.utf8))
                     let entries = parsed.entries ?? []
-                    return AnalyzePresentation(
+                    return try AnalyzePresentation(
                         result: parsed,
                         protectedPaths: evaluate(entries, home),
                         trashRisks: AnalyzePresentation.trashRisks(entries, home: home)
                     )
-                }.value
+                }
+                let prepared = try await withTaskCancellationHandler {
+                    try await preparation.value
+                } onCancel: {
+                    preparation.cancel()
+                }
                 try Task.checkCancellation()
                 guard loadID == id else { return }
                 cache[key] = prepared

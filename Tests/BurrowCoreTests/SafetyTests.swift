@@ -3,6 +3,28 @@ import Testing
 @testable import BurrowCore
 
 @Suite struct TrashGuardTests {
+    @Test func displayClassificationMatchesFreshChecksWithoutCachingAMutation() throws {
+        let home = try makeHome()
+        let fileManager = FileManager.default
+        let cloud = home + "/Library/Mobile Documents/container/Documents"
+        let orbStack = home + "/Library/Group Containers/example.dev.orbstack"
+        let ordinary = home + "/Downloads"
+        for path in [cloud, orbStack, ordinary] {
+            try fileManager.createDirectory(atPath: path, withIntermediateDirectories: true)
+        }
+        let link = home + "/linked"
+        try fileManager.createSymbolicLink(atPath: link, withDestinationPath: ordinary)
+        let paths = [home, cloud, cloud + "/child", orbStack, ordinary, ordinary + "/missing", link,
+                     "/System", "/System/Volumes/Data" + home, "/tmp/../System"]
+        let guardrail = TrashGuard(home: home)
+        let fresh = Set(paths.filter { (try? guardrail.validate($0)) == nil })
+        #expect(try guardrail.protectedPaths(paths) == fresh)
+        #expect(!fresh.contains(link))
+        try fileManager.removeItem(atPath: link)
+        try fileManager.createSymbolicLink(atPath: link, withDestinationPath: orbStack)
+        #expect(throws: TrashGuard.Refusal.self) { try guardrail.validate(link) }
+    }
+
     private func makeHome() throws -> String {
         let path = TestScratch.root + "burrow-guard-" + UUID().uuidString
         try FileManager.default.createDirectory(atPath: path + "/Library/Mobile Documents/com~apple~CloudDocs/Documents/sub", withIntermediateDirectories: true)

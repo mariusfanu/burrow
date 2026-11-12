@@ -16,7 +16,7 @@ struct AnalyzeContent: View {
                 .animation(Motion.settle, value: model.noticeMessage)
                 .animation(Motion.settle, value: model.errorMessage)
                 .padding([.horizontal, .bottom], Theme.Space.item)
-                .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 340, maxWidth: .infinity, maxHeight: .infinity)
             AnalyzeEntryList(model: model, cli: cli)
                 .frame(minWidth: 260, idealWidth: 320, maxWidth: 460)
         }

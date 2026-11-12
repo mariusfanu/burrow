@@ -6,6 +6,8 @@ struct RunTerminalToggle: View {
     var body: some View {
         Toggle("Terminal", systemImage: "terminal", isOn: $run.isTerminalVisible)
             .disabled(run.terminal == nil)
-            .help("Show the command's real terminal, where you can type directly")
+            .help(run.allowsTerminalInput && run.isRunning
+                  ? "Show the live terminal and type an answer"
+                  : "Show and copy the command’s terminal output")
     }
 }

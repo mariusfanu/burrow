@@ -2,8 +2,7 @@ import AppKit
 import BurrowCore
 import SwiftUI
 
-/// The command's real terminal. Keystrokes go straight to the running program, so any
-/// interactive screen the CLI offers stays reachable from the app.
+/// Displays the command's terminal and routes allowed input through its controller.
 struct TerminalPanel: NSViewRepresentable {
     let terminal: CLITerminal
     let revision: Int
@@ -17,7 +16,7 @@ struct TerminalPanel: NSViewRepresentable {
 
     func updateNSView(_ view: TerminalCanvas, context: Context) {
         view.terminal = terminal
-        if run.allowsTerminalInput {
+        if run.allowsTerminalInput && run.isRunning {
             view.sendInput = { [weak run, weak terminal] text in
                 guard let run, let terminal, run.terminal === terminal else { return }
                 run.send(text)

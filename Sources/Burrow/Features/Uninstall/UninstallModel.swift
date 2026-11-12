@@ -73,8 +73,8 @@ final class UninstallModel {
     var visibleApps: [InstalledApp] {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         return query.isEmpty ? orderedApps : orderedApps.filter {
-            $0.name.localizedCaseInsensitiveContains(query)
-                || ($0.bundleId?.localizedCaseInsensitiveContains(query) ?? false)
+            $0.name.localizedStandardContains(query)
+                || ($0.bundleId?.localizedStandardContains(query) ?? false)
         }
     }
 

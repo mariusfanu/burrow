@@ -120,6 +120,22 @@ struct UninstallModelTests {
         #expect(model.visibleApps.first?.name == "Beta")
     }
 
+    @Test func searchIgnoresCaseAndDiacritics() async throws {
+        let (model, commands, _) = fixture()
+        model.load(cli: fixtureCLI)
+        try await eventually { await commands.runs.count == 1 }
+        await commands.completeRun(0, stdout: """
+        [{"name":"Café","bundle_id":"com.example.Café","uninstall_name":"Café"}]
+        """)
+        try await eventually { model.state == .list }
+        for query in ["cafe", "CAF", "com.example.cafe"] {
+            model.searchText = query
+            #expect(model.visibleApps.map(\.name) == ["Café"])
+        }
+        model.searchText = "zzz"
+        #expect(model.visibleApps.isEmpty)
+    }
+
     @Test func equalNamesUseTheirIDsToKeepTheOrderDeterministic() async throws {
         let (model, commands, _) = fixture()
         model.load(cli: fixtureCLI)

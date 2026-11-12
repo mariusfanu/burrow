@@ -83,15 +83,12 @@ private struct GeneralSettings: View {
 /// The paths cleanup must leave alone.
 private struct ProtectedSettings: View {
     @Environment(AppModel.self) private var app
-    @State private var patterns: [String] = []
-    @State private var usesDefaults = false
-    @State private var isLoaded = false
+    @State private var model = ProtectedPathsModel()
     @State private var newPattern = ""
     @State private var selection: String?
-    @State private var errorMessage: String?
 
     private var store: WhitelistStore { WhitelistStore(home: AppModel.home, cliRoot: app.cli?.root) }
-    private var canEdit: Bool { isLoaded && !app.effectivePreview }
+    private var canEdit: Bool { model.isLoaded && !app.effectivePreview }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.item) {
@@ -99,10 +96,10 @@ private struct ProtectedSettings: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            if let errorMessage {
-                InlineNotice(text: errorMessage, tint: .red) { self.errorMessage = nil }
+            if let errorMessage = model.errorMessage {
+                InlineNotice(text: errorMessage, tint: .red) { model.errorMessage = nil }
             }
-            List(patterns, id: \.self, selection: $selection) { pattern in
+            List(model.patterns, id: \.self, selection: $selection) { pattern in
                 Text(pattern == "FINDER_METADATA" ? "Finder metadata (.DS_Store files)" : pattern.abbreviatingHome)
                     .font(.callout.monospaced())
                     .lineLimit(1)
@@ -110,7 +107,7 @@ private struct ProtectedSettings: View {
                     .help(pattern)
                     .transition(Motion.rise)
             }
-            .animation(Motion.settle, value: patterns)
+            .animation(Motion.settle, value: model.patterns)
             .frame(maxHeight: .infinity)
             HStack {
                 TextField("Add a path or pattern", text: $newPattern)
@@ -126,60 +123,32 @@ private struct ProtectedSettings: View {
             .disabled(!canEdit)
         }
         .padding(Theme.Space.page)
-        .animation(Motion.settle, value: errorMessage)
-        .onAppear(perform: reload)
+        .animation(Motion.settle, value: model.errorMessage)
+        .onAppear { model.load(from: store) }
     }
 
     private var explanation: String {
         if app.effectivePreview { return "These lists affect later real runs, so they’re read-only in Preview Mode." }
-        if usesDefaults { return "These are Mole’s default protections. Saving a change keeps them unless you remove them." }
+        if model.usesDefaults { return "These are Mole’s default protections. Saving a change keeps them unless you remove them." }
         return "Cleanup leaves these alone. Patterns can use * as a wildcard. Mole’s built-in safety rules always apply."
     }
 
-    private func reload() {
-        usesDefaults = store.usesDefaults
-        do {
-            patterns = try store.load()
-            isLoaded = true
-        } catch {
-            isLoaded = false
-            errorMessage = error.localizedDescription
+    private func addTyped() {
+        if model.addTyped(newPattern, to: store, home: AppModel.home, isPreview: app.effectivePreview) {
+            newPattern = ""
         }
     }
 
-    private func addTyped() {
-        let trimmed = newPattern.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        let expanded = trimmed.hasPrefix("~/") ? AppModel.home + trimmed.dropFirst(1) : trimmed
-        if add(expanded) { newPattern = "" }
-    }
-
     private func chooseFolder() {
-        if let path = FilePicker.chooseFolder(prompt: "Protect") { add(path) }
-    }
-
-    @discardableResult
-    private func add(_ pattern: String) -> Bool {
-        guard canEdit else { return false }
-        do {
-            try store.add(pattern)
-            errorMessage = nil
-            reload()
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
+        if let path = FilePicker.chooseFolder(prompt: "Protect") {
+            model.add(path, to: store, isPreview: app.effectivePreview)
         }
     }
 
     private func removeSelected() {
-        guard canEdit, let selection else { return }
-        do {
-            try store.remove(selection)
+        guard let selection else { return }
+        if model.remove(selection, from: store, isPreview: app.effectivePreview) {
             self.selection = nil
-            reload()
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 }

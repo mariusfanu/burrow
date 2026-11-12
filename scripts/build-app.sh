@@ -7,6 +7,13 @@ configuration="${1:-release}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
+bundle_version="$(awk -F'"' '/^[[:space:]]*MARKETING_VERSION:/ { print $2 }' project.yml)"
+bundle_build="$(awk -F'"' '/^[[:space:]]*CURRENT_PROJECT_VERSION:/ { print $2 }' project.yml)"
+if [ -z "$bundle_version" ] || [ -z "$bundle_build" ]; then
+    echo "Couldn't read the version from project.yml" >&2
+    exit 1
+fi
+
 swift build -c "$configuration" --product Burrow
 binary="$(swift build -c "$configuration" --show-bin-path)/Burrow"
 
@@ -39,7 +46,7 @@ if ! actool_output="$(xcrun actool "$root/Resources/Burrow.icon" \
     exit 1
 fi
 
-cat > "$app/Contents/Info.plist" <<'PLIST'
+cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -53,8 +60,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key><string>Burrow</string>
     <key>CFBundleDisplayName</key><string>Burrow</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
-    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleShortVersionString</key><string>$bundle_version</string>
+    <key>CFBundleVersion</key><string>$bundle_build</string>
     <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Marius Fanu</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key><string>26.0</string>

@@ -12,6 +12,14 @@ What has been simplified, what was measured, and what was deliberately left alon
   to build and free their C argument and environment arrays. Debug and release
   each reported 320 tests, and the release bundle passed strict signature
   verification.
+- **6.3. Bundle version from the project.** The bundle script reads the
+  marketing and build versions from `project.yml`. A temporary fixture with
+  a missing build number failed before compilation. Debug and release each
+  reported 320 tests, and the signed release bundle reported version 0.1.0
+  and build 1.
+
+All three steps built without warnings and passed the debug and release
+suites, with nine host-only tests skipped per run.
 
 ## November refactor — 12 November 2026
 

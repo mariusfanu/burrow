@@ -120,6 +120,20 @@ struct UninstallModelTests {
         #expect(model.visibleApps.first?.name == "Beta")
     }
 
+    @Test func skippingTheTrashAsksBeforeEnablingAndCanBeTurnedOff() {
+        let (model, _, _) = fixture()
+        model.skipsTrash = true
+        #expect(model.isConfirmingPermanent)
+        #expect(!model.deletePermanently)
+
+        model.isConfirmingPermanent = false
+        model.deletePermanently = true
+        #expect(model.skipsTrash)
+        model.skipsTrash = false
+        #expect(!model.deletePermanently)
+        #expect(!model.isConfirmingPermanent)
+    }
+
     @Test func searchIgnoresCaseAndDiacritics() async throws {
         let (model, commands, _) = fixture()
         model.load(cli: fixtureCLI)

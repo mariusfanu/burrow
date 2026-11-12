@@ -45,6 +45,19 @@ final class UninstallModel {
     var isConfirmingPermanent = false
     var includePersonalData = false
     var deletePermanently = false
+
+    /// The menu's Skip the Trash switch. Turning it on asks first, because it can't be undone.
+    var skipsTrash: Bool {
+        get { deletePermanently }
+        set {
+            if newValue {
+                isConfirmingPermanent = true
+            } else {
+                deletePermanently = false
+            }
+        }
+    }
+
     var errorMessage: String?
 
     let run: RunController

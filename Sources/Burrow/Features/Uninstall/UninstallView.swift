@@ -145,26 +145,13 @@ private struct UninstallOptionsMenu: View {
             Divider()
             Toggle("Include Personal Data", isOn: $model.includePersonalData)
                 .help("Also removes the settings and documents these apps keep")
-            Toggle("Skip the Trash…", isOn: permanent)
+            Toggle("Skip the Trash…", isOn: $model.skipsTrash)
                 .disabled(isPreview)
             Divider()
             Button("Deselect All", action: deselectAll)
                 .disabled(model.selection.isEmpty)
         }
         .help("Change the sort order and removal options")
-    }
-
-    /// Turning this on asks first, because it can't be undone.
-    private var permanent: Binding<Bool> {
-        Binding {
-            model.deletePermanently
-        } set: { newValue in
-            if newValue {
-                model.isConfirmingPermanent = true
-            } else {
-                model.deletePermanently = false
-            }
-        }
     }
 
     private func deselectAll() {

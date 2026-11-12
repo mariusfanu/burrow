@@ -13,7 +13,7 @@ struct AnalyzeLevel: Equatable, Identifiable {
     let originRect: CGRect?
 
     var id: String { path.map { "folder:\($0)" } ?? "disk-overview" }
-    var name: String { path.map { ($0 as NSString).lastPathComponent } ?? "This Mac" }
+    var name: String { path.map { $0.lastPathComponent } ?? "This Mac" }
 }
 
 /// A set of items moved to the Trash, kept so that Undo can put them back.
@@ -292,7 +292,7 @@ final class AnalyzeModel {
         let chosen = selectedEntries.map { (path: $0.path, size: $0.size) }
         if policy.effectivePreview {
             let count = chosen.count
-            noticeMessage = "Preview Mode: nothing moved. This would move \(count) \(count == 1 ? "item" : "items") (\(selectedBytes.fileSize)) to the Trash."
+            noticeMessage = "Preview Mode: nothing moved. This would move \(String(count.itemCount.characters)) (\(selectedBytes.fileSize)) to the Trash."
             withAnimation(Motion.snap) { selection = [] }
             return
         }
@@ -329,7 +329,7 @@ final class AnalyzeModel {
             }
             if !moved.isEmpty {
                 onFilesMoved?()
-                noticeMessage = "Moved \(moved.count) \(moved.count == 1 ? "item" : "items") to the Trash."
+                noticeMessage = "Moved \(String(moved.count.itemCount.characters)) to the Trash."
             }
             // The rest of the map closes over the gap, because the tiles keep their identity.
             withAnimation(Motion.lift) {
@@ -393,7 +393,7 @@ final class AnalyzeModel {
             showErrors(report, logFailure: "The restoration couldn’t be written to Mole’s history log.")
             let restored = report.outcomes.filter { $0.error == nil }.count
             if restored > 0 { onFilesMoved?() }
-            noticeMessage = restored > 0 ? "Put back \(restored) \(restored == 1 ? "item" : "items")." : nil
+            noticeMessage = restored > 0 ? "Put back \(String(restored.itemCount.characters))." : nil
             if !failed.isEmpty {
                 registerUndo(for: TrashedBatch(items: failed), cli: cli)
                 noticeMessage = "Some items couldn’t be put back. Undo can retry them."

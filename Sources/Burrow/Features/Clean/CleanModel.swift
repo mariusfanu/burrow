@@ -163,7 +163,7 @@ final class CleanModel {
         state = .running
         var arguments = ["clean", "--external", path]
         if preview { arguments.append("--dry-run") }
-        run.start(title: "Cleaning \((path as NSString).lastPathComponent)", doneTitle: "All Clean", cli: cli, arguments: arguments)
+        run.start(title: "Cleaning \(path.lastPathComponent)", doneTitle: "All Clean", cli: cli, arguments: arguments)
     }
 
     func finishRun() {

@@ -224,7 +224,7 @@ final class AppModel {
         guard customCLIPath == path, !isLocating else { return }
         cliChoiceError = cli?.executable == path
             ? nil
-            : "\((path as NSString).lastPathComponent) couldn’t be used. It isn’t a working copy of Mole, or another account can change it."
+            : "\(path.lastPathComponent) couldn’t be used. It isn’t a working copy of Mole, or another account can change it."
     }
 
     func setWindowVisible(_ visible: Bool) {

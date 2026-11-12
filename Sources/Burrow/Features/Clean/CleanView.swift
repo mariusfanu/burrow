@@ -373,7 +373,7 @@ struct ExternalVolumeSheet: View {
                 InlineNotice(text: "No external volumes are mounted.", symbol: "externaldrive", tint: .secondary)
             } else {
                 List(volumes, id: \.self, selection: $selection) { volume in
-                    Label((volume as NSString).lastPathComponent, systemImage: "externaldrive")
+                    Label(volume.lastPathComponent, systemImage: "externaldrive")
                 }
                 .frame(height: 140)
             }
@@ -401,7 +401,7 @@ struct ExternalVolumeSheet: View {
     }
 
     private var confirmationTitle: String {
-        let name = model.volumeAwaitingConfirmation.map { ($0 as NSString).lastPathComponent } ?? "This Volume"
+        let name = model.volumeAwaitingConfirmation.map { $0.lastPathComponent } ?? "This Volume"
         return "Clean Metadata from \(name)?"
     }
 

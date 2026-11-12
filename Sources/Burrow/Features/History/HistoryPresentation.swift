@@ -46,7 +46,7 @@ extension HistoryReport.Session {
     /// "1 item", "1,974 items", or nothing when no item was involved.
     var itemsText: AttributedString? {
         guard let items, items > 0 else { return nil }
-        return AttributedString(localized: "^[\(items) item](inflect: true)")
+        return items.itemCount
     }
 
     /// What happened, such as "2,145 removed · 271 skipped".

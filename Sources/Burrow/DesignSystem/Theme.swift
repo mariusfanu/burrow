@@ -91,6 +91,11 @@ extension Int64 {
     var countedSize: String { ByteFormat.rate.string(fromByteCount: self) }
 }
 
+extension Int {
+    /// "1 item", "1,974 items".
+    var itemCount: AttributedString { AttributedString(localized: "^[\(self) item](inflect: true)") }
+}
+
 /// Shared byte formatters. Zero is a number like any other here: "Zero KB" next to "1.2 GB"
 /// reads as a different kind of value and breaks a column's rhythm.
 private enum ByteFormat {
@@ -112,6 +117,9 @@ private enum ByteFormat {
 }
 
 extension String {
+    /// The last component of a path, such as a file or volume name.
+    var lastPathComponent: String { (self as NSString).lastPathComponent }
+
     /// Shortens the home directory to `~` for display.
     var abbreviatingHome: String {
         (self as NSString).abbreviatingWithTildeInPath

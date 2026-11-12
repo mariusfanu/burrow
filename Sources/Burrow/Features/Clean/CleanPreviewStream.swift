@@ -12,10 +12,14 @@ final class CleanPreviewStream: @unchecked Sendable {
     private var isFinished = false
     private let cancellationLock = NSLock()
     private var cancelled = false
+    private let pathListURL: URL
+    private let originalList: FileStamp?
 
     private var isCancelled: Bool { cancellationLock.withLock { cancelled } }
 
-    init() {
+    init(pathListURL: URL) {
+        self.pathListURL = pathListURL
+        originalList = FileStamp(url: pathListURL)
         (updates, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
     }
 
@@ -34,20 +38,44 @@ final class CleanPreviewStream: @unchecked Sendable {
     }
 
     /// FIFO with appends, so completion includes every chunk and the unfinished tail.
-    func finish(pathListURL: URL) async -> CleanReport {
+    func finish() async -> CleanReport {
         await withCheckedContinuation { waiter in
             queue.async { [self] in
                 guard !isCancelled else {
                     waiter.resume(returning: parser.snapshot)
                     return
                 }
-                let paths = try? String(contentsOf: pathListURL, encoding: .utf8)
-                let result = parser.finish(pathList: paths)
+                var result = parser.finish()
+                if parser.announcedPathList == pathListURL.path,
+                   let beforeRead = FileStamp(url: pathListURL), beforeRead != originalList,
+                   let paths = try? String(contentsOf: pathListURL, encoding: .utf8),
+                   FileStamp(url: pathListURL) == beforeRead {
+                    result = parser.finish(pathList: paths)
+                } else if result.potentialBytes > 0 {
+                    result.notes.append("Mole’s detailed file list wasn’t available for this preview.")
+                }
                 isFinished = true
                 continuation.yield(result)
                 continuation.finish()
                 waiter.resume(returning: result)
             }
+        }
+    }
+
+    private struct FileStamp: Equatable {
+        let identity: TrashMover.FileIdentity
+        let modified: Date
+        let size: UInt64
+
+        init?(url: URL) {
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+                  attributes[.type] as? FileAttributeType == .typeRegular,
+                  let identity = TrashMover.FileIdentity(path: url.path),
+                  let modified = attributes[.modificationDate] as? Date,
+                  let size = attributes[.size] as? NSNumber else { return nil }
+            self.identity = identity
+            self.modified = modified
+            self.size = size.uint64Value
         }
     }
 

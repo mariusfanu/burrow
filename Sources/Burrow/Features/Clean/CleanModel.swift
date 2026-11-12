@@ -73,7 +73,7 @@ final class CleanModel {
         state = .scanning
         scanActivity = "Starting"
         errorMessage = nil
-        let preview = CleanPreviewStream()
+        let preview = CleanPreviewStream(pathListURL: URL(fileURLWithPath: home + "/.config/mole/clean-list.txt"))
         activePreview = preview
         scanTask = Task {
             let updateTask = Task { [self] in
@@ -98,8 +98,7 @@ final class CleanModel {
                 try Task.checkCancellation()
                 guard scanID == id else { return }
                 guard status == 0 else { throw CommandError.failed(status: status, message: "The preview didn't finish.") }
-                let listURL = URL(fileURLWithPath: home + "/.config/mole/clean-list.txt")
-                let finished = await preview.finish(pathListURL: listURL)
+                let finished = await preview.finish()
                 try Task.checkCancellation()
                 guard scanID == id else { return }
                 withAnimation(Motion.glide) {

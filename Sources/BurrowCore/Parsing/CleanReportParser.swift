@@ -7,6 +7,7 @@ public struct CleanReportParser: Sendable {
     private var report = CleanReport()
     private var nextRowID = 0
     private var isFinished = false
+    public private(set) var announcedPathList: String?
 
     public init() {}
 
@@ -38,6 +39,11 @@ public struct CleanReportParser: Sendable {
     private mutating func consume(_ raw: String) {
         guard !LogLine.isDecoration(raw) else { return }
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        let detailPrefix = "Detailed file list: "
+        if trimmed.hasPrefix(detailPrefix) {
+            announcedPathList = String(trimmed.dropFirst(detailPrefix.count))
+            return
+        }
         if let summary = trimmed.firstMatch(of: Self.potentialSpace) {
             report.potentialText = String(summary.1)
             report.itemCount = summary.2.flatMap { Int($0) }

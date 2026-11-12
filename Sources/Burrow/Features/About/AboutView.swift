@@ -87,14 +87,14 @@ struct AboutView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: Theme.Space.cluster) {
-                    documentButton("Show Notice in Finder", file: "NOTICE")
+                    AboutDocumentButton(title: "Show Notice in Finder", file: "NOTICE")
 
                     Text("·")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
 
-                    documentButton("Show License in Finder", file: "LICENSE")
+                    AboutDocumentButton(title: "Show License in Finder", file: "LICENSE")
                 }
 
                 Text("Copyright © 2026 Marius Fanu")
@@ -104,22 +104,6 @@ struct AboutView: View {
             }
         }
         .padding(Theme.Space.page)
-    }
-
-    private func documentButton(_ title: LocalizedStringKey, file: String) -> some View {
-        let url = Bundle.main.url(forResource: file, withExtension: nil) ?? localDocument(file)
-        return Button(title) {
-            if let url { FilePicker.reveal(url.path) }
-        }
-        .buttonStyle(.link)
-        .font(.caption)
-        .disabled(url == nil)
-    }
-
-    private func localDocument(_ file: String) -> URL? {
-        let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-            .appending(path: file)
-        return FileManager.default.isReadableFile(atPath: url.path) ? url : nil
     }
 }
 

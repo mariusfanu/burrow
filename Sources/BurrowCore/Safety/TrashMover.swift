@@ -38,22 +38,38 @@ public enum TrashMover {
     }
 
     public struct Outcome: Sendable {
+        public enum Status: Sendable, Equatable {
+            case succeeded
+            case alreadyMissing
+            case failed(String)
+        }
+
         public let path: String
-        public let error: String?
+        public let status: Status
+        public var error: String? {
+            if case .failed(let message) = status { return message }
+            return nil
+        }
         /// Where the item landed in the Trash, which is what makes Undo possible.
         public let trashedURL: URL?
         public let trashedIdentity: FileIdentity?
 
         public init(path: String, error: String?, trashedURL: URL? = nil, trashedIdentity: FileIdentity? = nil) {
+            self.init(path: path, status: error.map(Status.failed) ?? .succeeded,
+                      trashedURL: trashedURL, trashedIdentity: trashedIdentity)
+        }
+
+        public init(path: String, status: Status, trashedURL: URL? = nil, trashedIdentity: FileIdentity? = nil) {
             self.path = path
-            self.error = error
+            self.status = status
             self.trashedURL = trashedURL
             self.trashedIdentity = trashedIdentity
         }
 
         /// What Undo needs, when the item's new location is known.
         public var trashedItem: TrashedItem? {
-            trashedURL.map { TrashedItem(trashedURL: $0, originalPath: path, identity: trashedIdentity) }
+            guard status == .succeeded else { return nil }
+            return trashedURL.map { TrashedItem(trashedURL: $0, originalPath: path, identity: trashedIdentity) }
         }
     }
 
@@ -140,7 +156,7 @@ public enum TrashMover {
                 // A path that's already gone is not logged, because nothing was done to it.
                 var info = stat()
                 if lstat(entry.path, &info) != 0, errno == ENOENT {
-                    outcomes.append(Outcome(path: entry.path, error: nil))
+                    outcomes.append(Outcome(path: entry.path, status: .alreadyMissing))
                     continue
                 }
                 let trashedURL = try await moveToTrash(entry.path, environment: environment)

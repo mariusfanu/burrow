@@ -243,6 +243,7 @@ import Testing
         )
         #expect(report.outcomes.first?.error == nil)
         let log = try String(contentsOfFile: home + "/Library/Logs/mole/operations.log", encoding: .utf8)
+        #expect(report.outcomes.first?.status == .alreadyMissing)
         #expect(!log.contains("gone.bin"))
     }
 }

@@ -95,8 +95,10 @@ final class AnalyzeModel {
 
     /// Another page changed the disk, so what's on show may be wrong until the next look.
     func markStale() {
+        cancelScan()
         isStale = true
         cache.removeAll()
+        pendingTrash = nil
     }
 
     func invalidateCLIResults() {
@@ -170,13 +172,12 @@ final class AnalyzeModel {
     }
 
     var canTrashSelection: Bool {
-        !isLoading && !isTrashing && !isShuttingDown && !selection.isEmpty
+        !isStale && !isLoading && !isTrashing && !isShuttingDown && !selection.isEmpty
             && selectedEntries.count == selection.count && selectedEntries.allSatisfy(canTrash)
     }
 
     func refresh(cli: CLIInfo) {
         guard !isTrashing else { return }
-        isStale = false
         load(cli: cli, refresh: true)
     }
 
@@ -235,6 +236,7 @@ final class AnalyzeModel {
                 try Task.checkCancellation()
                 guard loadID == id else { return }
                 cache[key] = prepared
+                isStale = false
                 withAnimation(Motion.lift) { presentation = prepared }
                 isLoading = false
             } catch is CancellationError {
@@ -282,6 +284,10 @@ final class AnalyzeModel {
     /// anyone thinks to undo it.
     func trashSelection(cli: CLIInfo) {
         guard !isTrashing, !isShuttingDown else { return }
+        guard !isStale else {
+            noticeMessage = "Rescan this folder to review its current contents."
+            return
+        }
         guard canTrashSelection else {
             noticeMessage = "Protected items stay view-only. Select other items to move to the Trash."
             return
@@ -315,7 +321,8 @@ final class AnalyzeModel {
                 return
             }
             let report = await self.trashClient.trash(chosen, self.home)
-            let moved = report.outcomes.filter { $0.error == nil }
+            let moved = report.outcomes.filter { $0.status == .succeeded }
+            let removed = report.outcomes.filter { $0.status == .succeeded || $0.status == .alreadyMissing }
             showErrors(report, logFailure: "The move couldn’t be written to Mole’s history log.")
 
             let restorable = moved.compactMap(\.trashedItem)
@@ -327,14 +334,16 @@ final class AnalyzeModel {
             if !moved.isEmpty {
                 onFilesMoved?()
                 noticeMessage = "Moved \(String(moved.count.itemCount.characters)) to the Trash."
+            } else if !removed.isEmpty {
+                noticeMessage = "The selected items that disappeared were already missing."
             }
             // The rest of the map closes over the gap, because the tiles keep their identity.
             withAnimation(Motion.lift) {
-                presentation = presentation?.removing(Set(moved.map(\.path)))
+                presentation = presentation?.removing(Set(removed.map(\.path)))
                 selection = []
             }
             cache.removeAll()
-            if let presentation { cache[current?.id ?? "/"] = presentation }
+            if !isStale, let presentation { cache[current?.id ?? "/"] = presentation }
         }
     }
 

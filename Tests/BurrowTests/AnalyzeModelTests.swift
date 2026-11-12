@@ -35,6 +35,36 @@ private actor AnalyzeFiles {
 
 @MainActor
 struct AnalyzeModelTests {
+    @Test func aScanThatPredatesInvalidationCannotPublish() async throws {
+        let commands = ScriptedCommands()
+        let model = AnalyzeModel(policy: .live, commands: commands.client, home: "/fixture")
+        model.openRoot(cli: fixtureCLI)
+        try await eventually { await commands.runs.count == 1 }
+        model.markStale()
+        await commands.completeRun(0, stdout: #"{"path":"/old"}"#)
+        model.openRoot(cli: fixtureCLI)
+        try await eventually { await commands.runs.count == 2 }
+        #expect(model.result == nil)
+        await commands.completeRun(1, stdout: #"{"path":"/current"}"#)
+        try await eventually { model.result?.path == "/current" }
+    }
+
+    @Test func anAlreadyMissingItemDisappearsWithoutAnnouncingAMove() async throws {
+        let files = AnalyzeFiles()
+        let client = TrashClient(trash: { entries, _ in
+            .init(outcomes: entries.map { .init(path: $0.path, status: .alreadyMissing) }, logFailed: false)
+        })
+        let model = AnalyzeModel(policy: .live, commands: CommandClient(run: { _, _, _ in try await files.report() }),
+                                 trashClient: client, home: "/fixture")
+        model.onFilesMoved = { Issue.record("Missing items did not change the filesystem") }
+        model.openRoot(cli: fixtureCLI)
+        try await eventually { model.entries.count == 2 }
+        try await trash("/fixture/a", in: model)
+        #expect(model.entries.map(\.path) == ["/fixture/b"])
+        #expect(model.noticeMessage?.contains("already missing") == true)
+        #expect(model.lastTrashed == nil)
+    }
+
     private func fixture(policy: ExecutionPolicy = .live, restores: SuspendedRestore? = nil) async throws -> (AnalyzeModel, AnalyzeFiles, UndoManager) {
         let files = AnalyzeFiles()
         let commands = CommandClient(run: { _, _, _ in try await files.report() })

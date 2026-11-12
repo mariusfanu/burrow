@@ -2,6 +2,61 @@
 
 What has been simplified, what was measured, and what was deliberately left alone. Keep this current as work continues, so that the same ideas don't get tried twice.
 
+## November refactor — 12 November 2026
+
+Implemented the required steps in [the refactor plan](refactor-plan.md) on
+`refactor/review-2026-11`, starting from `d9dce44`. Each implementation step
+has its own commit. Phase 6 is opt-in and was skipped.
+
+- **Search, formatting and allocation.** Uninstall matches case and accents in
+  app names and bundle IDs. Status numbers use locale-aware formatting. History
+  shares its date parsers and display formatter. The review's optimized formatter
+  microbenchmark for 200 rows went from 54.8 ms to 13.7 ms. A separate run with
+  the committed code produced identical output. Whitelist defaults load on
+  demand, and Terminal measures its cells and builds its palette once. Removed
+  two placeholder About tests and made the planned API and style updates.
+- **Shared presentation rules.** History uses Screen's command-to-page mapping
+  and shares its work filter with Overview. Screen supplies the Overview tiles
+  and Go shortcuts. The four relative bars use the same part-of-whole
+  initializer. Both selectable lists use one checkbox. Path names and item counts
+  share formatting, and the app's line-assembling buffer is named
+  `LineOutputBuffer`.
+- **Model-owned state and actions.** Disk Explorer and external-volume
+  confirmations and Skip the Trash use model bindings. Protected settings has a
+  tested model for loading and guarded edits. External volume discovery lives
+  beside the Clean model.
+- **View boundaries.** Run panel content, the completion hero and banner, and
+  About's document buttons are separate views. Completion animation state lives
+  on the hero. Tests cover completion text for success, failure and cancellation.
+- **File layout.** Split the app shell, design system, Run panel, Status cards,
+  Disk Explorer, remaining features and public core types. The arrival effect
+  shares its wave limit with `ArrivalState`, disk thresholds live in
+  `StatusTint`, and the History Files list uses a deletion row.
+- **Test fixture.** A menu test intermittently read its result after the shell
+  created the file and before it wrote the contents. The test now waits for the
+  fixture command to exit before reading.
+
+Debug and release each reported 320 tests across 39 app and 32 core suites
+(134 app and 186 core), with nine host-only cases skipped by default. The build
+was warning-free. The release bundle passed strict signature verification.
+The file-move comparison accounted for every declaration and the planned small
+edits. The source checks found only the two documented closure bindings and
+the two locale-independent format calls in `OperationsLog`.
+
+In the release app with `BURROW_FORCE_PREVIEW=1` and a disposable Mole fixture,
+all ten pages opened and Command-1 through Command-9 reached their Go menu
+destinations. A preview clean reached its result with the checkmark drawing and
+the byte count rising to 12.3 MB. Show Details and Hide Details switched
+layouts, Terminal showed the styled output and cursor, `cafe` matched Café, and
+Protected loaded its defaults with edits disabled. Bounce and ripple timing
+received source review. The check used macOS 27.3 and a fixture CLI.
+
+Rapid accessibility and screenshot reads around completion intermittently
+left the progress view visible after the command exited. The same symptom
+reproduced on the pre-refactor release, and the ordinary Preview Mode workflow
+completed on both builds. The refactor carries no speculative change for this
+finding.
+
 ## Follow-up review — 6 November 2026
 
 Started from `5e9e7ad` with a clean working tree. The baseline passed all 278 tests
@@ -340,6 +395,8 @@ Startup to a working page is about 0.45 s, and an idle window uses no measurable
 
 ## Decisions
 
+- **Use one type per file for views, modifiers and models.** Private non-view helpers may stay beside their only user.
+- **The shared row checkbox is the only closure binding in a selectable row.** Maintenance Settings keeps the other closure binding to save through its Preview Mode guard.
 - **`EntryMap` owns which entries get tiles.** The map and the zoom origin both use it, so they can't disagree.
 - **`EscapeTokenizer` owns the escape grammar.** `TerminalScreen` and `LineAssembler` stay separate, because a cell grid and a stream of lines are different jobs, but they read the same sequences the same way.
 - **`ChildExitWatcher` owns exit detection,** including why the system's exit event can't be relied on alone. Don't remove its timer: without it, about 1 in 100 quick commands is never noticed to have ended.

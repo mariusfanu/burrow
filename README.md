@@ -202,6 +202,8 @@ Tests                Parser, terminal, safety and sandboxed CLI tests
 scripts              App bundle and icon builders
 ```
 
+Each feature folder holds its models and one Swift file per view.
+
 ## Contributing
 
 For bug reports, include your macOS and Mole versions, the Burrow page, whether Preview Mode was on, and steps to reproduce. Remove personal paths and any sensitive data from screenshots or command output before sharing them.

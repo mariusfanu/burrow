@@ -83,10 +83,11 @@ final class TerminalCanvas: NSView {
         window?.makeFirstResponder(self)
     }
 
-    private var cellSize: CGSize {
+    private let cellSize: CGSize = {
+        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         let width = ("M" as NSString).size(withAttributes: [.font: font]).width
         return CGSize(width: ceil(width), height: ceil(font.ascender - font.descender + font.leading) + 2)
-    }
+    }()
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
@@ -169,21 +170,22 @@ final class TerminalCanvas: NSView {
         }
     }
 
+    private static let basePalette: [UInt32] = [
+        0x2C2C2E, 0xFF6961, 0x63D471, 0xFFD426, 0x5AA9FF, 0xDA8FFF, 0x5AD8E6, 0xD1D1D6,
+        0x8E8E93, 0xFF8A84, 0x86E68F, 0xFFE066, 0x8AC4FF, 0xE5ACFF, 0x8CE8F2, 0xFFFFFF,
+    ]
+    private static let cubeLevels: [CGFloat] = [0, 95, 135, 175, 215, 255]
+
     private static func paletteColor(_ index: UInt8) -> NSColor {
-        let base: [UInt32] = [
-            0x2C2C2E, 0xFF6961, 0x63D471, 0xFFD426, 0x5AA9FF, 0xDA8FFF, 0x5AD8E6, 0xD1D1D6,
-            0x8E8E93, 0xFF8A84, 0x86E68F, 0xFFE066, 0x8AC4FF, 0xE5ACFF, 0x8CE8F2, 0xFFFFFF,
-        ]
         switch index {
         case 0..<16:
-            return NSColor(hex: base[Int(index)])
+            return NSColor(hex: basePalette[Int(index)])
         case 16..<232:
             let value = Int(index) - 16
-            let levels: [CGFloat] = [0, 95, 135, 175, 215, 255]
             return NSColor(
-                srgbRed: levels[value / 36] / 255,
-                green: levels[(value / 6) % 6] / 255,
-                blue: levels[value % 6] / 255,
+                srgbRed: cubeLevels[value / 36] / 255,
+                green: cubeLevels[(value / 6) % 6] / 255,
+                blue: cubeLevels[value % 6] / 255,
                 alpha: 1
             )
         default:

@@ -111,18 +111,11 @@ public final class PTYSession: @unchecked Sendable {
         var initialized = false
         defer { if !initialized { registration.finish() } }
         guard !registration.isStopRequested else { throw CancellationError() }
-        var argv: [UnsafeMutablePointer<CChar>?] = ([executable] + arguments).map { strdup($0) }
-        argv.append(nil)
-        var envp: [UnsafeMutablePointer<CChar>?] = environment.map { strdup("\($0.key)=\($0.value)") }
-        envp.append(nil)
-        defer {
-            argv.forEach { free($0) }
-            envp.forEach { free($0) }
-        }
-
         var masterFD: Int32 = -1
         var childPID: pid_t = 0
-        let result = cpty_spawn(executable, argv, envp, rows, columns, &masterFD, &childPID)
+        let result = withSpawnArguments(executable: executable, arguments: arguments, environment: environment) { argv, envp in
+            cpty_spawn(executable, argv, envp, rows, columns, &masterFD, &childPID)
+        }
         guard result == 0 else { throw PTYError.spawnFailed(result) }
         let flags = fcntl(masterFD, F_GETFL)
         guard flags >= 0, fcntl(masterFD, F_SETFL, flags | O_NONBLOCK) == 0 else {

@@ -124,21 +124,15 @@ private final class ProcessBox: @unchecked Sendable {
             let input = open("/dev/null", O_RDONLY | O_CLOEXEC)
             guard input >= 0 else { throw POSIXError(.EBADF) }
             defer { close(input) }
-            var argv = ([executable] + arguments).map { strdup($0) }
-            argv.append(nil)
-            var envp = environment.map { strdup("\($0.key)=\($0.value)") }
-            envp.append(nil)
-            defer {
-                argv.forEach { free($0) }
-                envp.forEach { free($0) }
-            }
-            try lock.withLock {
-                guard reason == nil, !registration.isStopRequested else { throw CancellationError() }
-                var child: pid_t = 0
-                let result = cpipe_spawn(executable, argv, envp, input, output, error, &child)
-                guard result == 0 else { throw POSIXError(POSIXErrorCode(rawValue: result) ?? .EIO) }
-                pid = child
-                self.registration = registration
+            try withSpawnArguments(executable: executable, arguments: arguments, environment: environment) { argv, envp in
+                try lock.withLock {
+                    guard reason == nil, !registration.isStopRequested else { throw CancellationError() }
+                    var child: pid_t = 0
+                    let result = cpipe_spawn(executable, argv, envp, input, output, error, &child)
+                    guard result == 0 else { throw POSIXError(POSIXErrorCode(rawValue: result) ?? .EIO) }
+                    pid = child
+                    self.registration = registration
+                }
             }
             registration.installStop { [self] in stop(reason: .cancelled) }
         } catch {

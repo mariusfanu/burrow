@@ -8,6 +8,10 @@ What has been simplified, what was measured, and what was deliberately left alon
   lines and status JSON each put their mutable state behind a
   `Synchronization.Mutex`. Debug and release each reported 320 tests, and the
   release bundle passed strict signature verification.
+- **6.2. Shared spawn arguments.** The piped and PTY spawners use one helper
+  to build and free their C argument and environment arrays. Debug and release
+  each reported 320 tests, and the release bundle passed strict signature
+  verification.
 
 ## November refactor — 12 November 2026
 

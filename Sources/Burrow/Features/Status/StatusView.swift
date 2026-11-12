@@ -362,7 +362,7 @@ private struct DiskCard: View {
         Surface {
             VStack(alignment: .leading, spacing: Theme.Space.row) {
                 CardTitle(title: "Disk", symbol: "internaldrive")
-                ForEach(snapshot.disks ?? [], id: \.mount) { disk in
+                ForEach(snapshot.disks ?? []) { disk in
                     DiskRow(disk: disk)
                 }
                 Text("Read \(rate(snapshot.diskIo?.readRate)) · Write \(rate(snapshot.diskIo?.writeRate))")

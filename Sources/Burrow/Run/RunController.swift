@@ -120,7 +120,7 @@ final class RunController {
         isPreview = arguments.contains("--dry-run")
         self.doneTitle = doneTitle
         self.expectedSections = expectedSections
-        startDate = Date()
+        startDate = Date.now
         commandLine = (["mo"] + arguments).joined(separator: " ")
         isTerminalVisible = showsTerminal
         guard !policy.effectivePreview || isPreview else {
@@ -421,7 +421,7 @@ final class RunController {
         promptCheck = nil
         flushLines()
         summary = RunSummary.parse(lines: lines.lazy.map(\.raw))
-        if let startDate { duration = Date().timeIntervalSince(startDate) }
+        if let startDate { duration = Date.now.timeIntervalSince(startDate) }
         withAnimation(Motion.settle) {
             phase = .finished(status: status)
             if status == 0 { completedSections = expectedSections }

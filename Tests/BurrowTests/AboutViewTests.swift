@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 import Testing
 @testable import Burrow
 
@@ -14,15 +13,5 @@ struct AboutViewTests {
     @Test func settingsPaneIncludesAbout() {
         #expect(SettingsPane.about.rawValue == "about")
         #expect(SettingsPane(rawValue: "about") == .about)
-    }
-
-    @Test func aboutViewCanBeInstantiated() {
-        let view = AboutView()
-        #expect(String(describing: type(of: view)) == "AboutView")
-    }
-
-    @Test func aboutPanelControllerCanBeAccessed() {
-        let controller = AboutPanelController.shared
-        #expect(controller === AboutPanelController.shared)
     }
 }

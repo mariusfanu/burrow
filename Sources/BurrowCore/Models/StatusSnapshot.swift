@@ -31,7 +31,9 @@ public struct StatusSnapshot: Decodable, Sendable, Equatable {
         public var swapUsed: Int64?
     }
 
-    public struct Disk: Decodable, Sendable, Equatable {
+    public struct Disk: Decodable, Sendable, Equatable, Identifiable {
+        public var id: String { mount ?? "" }
+
         public var mount: String?
         public var used: Int64?
         public var total: Int64?

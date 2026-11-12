@@ -24,6 +24,10 @@ final class StatusStore {
     private let gpuReadings: @Sendable () -> [GPUReading]
     private(set) var isRunning = false
 
+    /// Counts samples, which starts each chart's scroll and pulses the live indicator.
+    private(set) var sampleCount = 0
+    private let historyLimit = 60
+
     init(
         commands: CommandClient = CommandClient(),
         retryDelay: Duration = .seconds(3),
@@ -33,9 +37,6 @@ final class StatusStore {
         self.retryDelay = retryDelay
         self.gpuReadings = gpuReadings
     }
-    /// Counts samples, which starts each chart's scroll and pulses the live indicator.
-    private(set) var sampleCount = 0
-    private let historyLimit = 60
 
     /// Restarts when the interval or CLI changes, or the previous stream has finished.
     func start(cli: CLIInfo, interval: Int) {

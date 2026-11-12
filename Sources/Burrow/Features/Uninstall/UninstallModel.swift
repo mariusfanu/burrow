@@ -49,6 +49,16 @@ final class UninstallModel {
 
     let run: RunController
 
+    private let home: String
+    private var isStale = false
+    private var loadTask: Task<Void, Never>?
+    private var sizeTask: Task<Void, Never>?
+    private var loadID = UUID()
+    private var measurementID = UUID()
+    private var measurementWasInteractedWith = false
+    private let commands: CommandClient
+    private let sizeClient: AppSizeClient
+
     init(
         policy: ExecutionPolicy,
         commands: CommandClient = CommandClient(),
@@ -60,15 +70,6 @@ final class UninstallModel {
         self.sizeClient = sizeClient
         self.home = home
     }
-    private let home: String
-    private var isStale = false
-    private var loadTask: Task<Void, Never>?
-    private var sizeTask: Task<Void, Never>?
-    private var loadID = UUID()
-    private var measurementID = UUID()
-    private var measurementWasInteractedWith = false
-    private let commands: CommandClient
-    private let sizeClient: AppSizeClient
 
     var visibleApps: [InstalledApp] {
         let query = searchText.trimmingCharacters(in: .whitespaces)

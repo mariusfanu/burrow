@@ -35,7 +35,7 @@ public struct HistoryReport: Decodable, Sendable, Equatable {
 
         public var commandName: String {
             guard let command else { return "unknown" }
-            return command.replacingOccurrences(of: "-dry-run", with: "")
+            return command.replacing("-dry-run", with: "")
         }
     }
 

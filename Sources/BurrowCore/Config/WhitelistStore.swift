@@ -68,8 +68,8 @@ public struct WhitelistStore: Sendable {
         var expanded = pattern
         if expanded.hasPrefix("~") { expanded = home + expanded.dropFirst() }
         expanded = expanded
-            .replacingOccurrences(of: "${HOME}", with: home)
-            .replacingOccurrences(of: "$HOME", with: home)
+            .replacing("${HOME}", with: home)
+            .replacing("$HOME", with: home)
         if expanded.contains("..") { return "Mole doesn't accept “..” in a protected path." }
         if expanded.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) {
             return "A protected path can't contain control characters."
@@ -103,8 +103,8 @@ public struct WhitelistStore: Sendable {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 guard trimmed.hasPrefix("\""), trimmed.hasSuffix("\""), trimmed.count >= 2 else { return nil }
                 return String(trimmed.dropFirst().dropLast())
-                    .replacingOccurrences(of: "$HOME", with: home)
-                    .replacingOccurrences(of: "$FINDER_METADATA_SENTINEL", with: "FINDER_METADATA")
+                    .replacing("$HOME", with: home)
+                    .replacing("$FINDER_METADATA_SENTINEL", with: "FINDER_METADATA")
             }
     }
 }

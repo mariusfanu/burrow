@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 /// Information about Burrow, its creator Marius Fanu, websites and license.
-public struct AboutView: View {
-    public init() {}
+struct AboutView: View {
+    init() {}
 
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
@@ -11,29 +11,28 @@ public struct AboutView: View {
         return "Version \(version) (\(build))"
     }
 
-    public static let personalWebsiteURL = URL(string: "https://mariusfanu.com")!
-    public static let burrowWebsiteURL = URL(string: "https://burrow.mariusfanu.com")!
-    public static let moleRepoURL = URL(string: "https://github.com/tw93/Mole")!
+    static let personalWebsiteURL = URL(string: "https://mariusfanu.com")!
+    static let burrowWebsiteURL = URL(string: "https://burrow.mariusfanu.com")!
+    static let moleRepoURL = URL(string: "https://github.com/tw93/Mole")!
 
     private var appIcon: NSImage {
         NSApp?.applicationIconImage ?? NSImage(size: NSSize(width: 80, height: 80))
     }
 
-    public var body: some View {
+    var body: some View {
         VStack(spacing: Theme.Space.group) {
-            // App Header
             VStack(spacing: Theme.Space.item) {
                 Image(nsImage: appIcon)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 80, height: 80)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
+                    .clipShape(.rect(cornerRadius: 18))
+                    .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
                     .accessibilityHidden(true)
 
                 VStack(spacing: Theme.Space.tight) {
                     Text("Burrow")
-                        .font(.title2.weight(.bold))
+                        .font(.title2).bold()
                         .accessibilityAddTraits(.isHeader)
 
                     Text(appVersion)
@@ -48,7 +47,6 @@ public struct AboutView: View {
             }
             .padding(.top, Theme.Space.snug)
 
-            // Creator & Project Links
             Surface(padding: Theme.Space.card) {
                 VStack(alignment: .leading, spacing: Theme.Space.cluster) {
                     AboutLinkRow(
@@ -81,7 +79,6 @@ public struct AboutView: View {
                 }
             }
 
-            // Notice & License Details
             VStack(spacing: Theme.Space.tight) {
                 Text("Burrow is an independent, unofficial front end distributed under the GNU General Public License v3.0.")
                     .font(.caption)
@@ -167,7 +164,7 @@ private struct AboutLinkRow: View {
                     .scaleEffect(isHovered && !Motion.isReduced ? 1.08 : 1)
                     .accessibilityHidden(true)
             }
-            .contentShape(Rectangle())
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -181,13 +178,13 @@ private struct AboutLinkRow: View {
 
 /// Controls presenting the dedicated About panel.
 @MainActor
-public final class AboutPanelController {
-    public static let shared = AboutPanelController()
+final class AboutPanelController {
+    static let shared = AboutPanelController()
     private var window: NSPanel?
 
     private init() {}
 
-    public func show() {
+    func show() {
         if let window {
             window.center()
             window.makeKeyAndOrderFront(nil)

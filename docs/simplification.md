@@ -76,6 +76,20 @@ reproduced on the pre-refactor release, and the ordinary Preview Mode workflow
 completed on both builds. The refactor carries no speculative change for this
 finding.
 
+### Clean completion follow-up
+
+Reproduced the stale progress pane on `main` at `162e1e4` with a disposable
+Preview Mode command and rapid accessibility and screenshot reads. The toolbar
+showed Done while the pane still showed “Previewing Cleanup 100%”. A separate
+run showed the result while the toolbar still showed Cancel.
+
+The controller now flushes the final output without animating it and publishes
+the finished phase after the summary, progress and prompt state are ready.
+The completion view still animates its result when it appears. Twelve runs
+under polling reached both the result and Done. Show Details and Hide Details
+worked, and the debug and release suites each reported 320 tests with nine
+host-only skips.
+
 ## Follow-up review — 6 November 2026
 
 Started from `5e9e7ad` with a clean working tree. The baseline passed all 278 tests

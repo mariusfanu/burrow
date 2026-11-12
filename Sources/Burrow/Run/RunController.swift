@@ -314,12 +314,12 @@ final class RunController {
         }
     }
 
-    private func flushLines() {
+    private func flushLines(animated: Bool = true) {
         lineFlush?.cancel()
         lineFlush = nil
         guard !pendingLines.isEmpty else { return }
         // Only a modest list is worth animating.
-        if lines.count < 300 {
+        if animated, lines.count < 300 {
             withAnimation(Motion.snap) { lines.append(contentsOf: pendingLines) }
         } else {
             lines.append(contentsOf: pendingLines)
@@ -413,15 +413,14 @@ final class RunController {
     private func finish(status: Int32) {
         promptCheck?.cancel()
         promptCheck = nil
-        flushLines()
+        // Settle the final log and progress before publishing the finished phase.
+        flushLines(animated: false)
         summary = RunSummary.parse(lines: lines.lazy.map(\.raw))
         if let startDate { duration = Date.now.timeIntervalSince(startDate) }
-        withAnimation(Motion.settle) {
-            phase = .finished(status: status)
-            if status == 0 { completedSections = expectedSections }
-        }
+        if status == 0 { completedSections = expectedSections }
         activity = ""
         promptRequest = nil
+        phase = .finished(status: status)
         if !isPreview, !wasDeclined { onFinishedChanges?() }
     }
 }

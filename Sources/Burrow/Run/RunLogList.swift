@@ -56,7 +56,7 @@ struct RunLogList: View {
                     .padding(Theme.Space.item)
                 }
             }
-            .onChange(of: run.lines.count) {
+            .onChange(of: run.lines.last?.id) {
                 guard follow.isFollowing else { return }
                 withAnimation(Motion.glide) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }
@@ -64,6 +64,7 @@ struct RunLogList: View {
             .task {
                 // Returning mid-run: once row heights are real, land exactly on the latest row.
                 try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
                 follow.finishSettling()
                 if follow.isFollowing { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }

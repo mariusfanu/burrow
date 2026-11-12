@@ -8,6 +8,7 @@ struct AnalyzeContent: View {
     var body: some View {
         HSplitView {
             TreemapStage(model: model, cli: cli)
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { model.mapSize = $0 }
                 .overlay(alignment: .top) {
                     AnalyzeNotices(model: model, cli: cli)
                         .padding(Theme.Space.item)

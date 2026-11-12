@@ -30,6 +30,7 @@ final class AnalyzeModel {
     private(set) var zoomRect: CGRect?
     /// The color of that tile.
     private(set) var zoomTint: UInt32?
+    @ObservationIgnored var mapSize: CGSize = .zero
     private(set) var lastTrashed: TrashedBatch?
     var selection: Set<String> = []
     var hovered: String?
@@ -144,7 +145,15 @@ final class AnalyzeModel {
         guard !isTrashing, !isShuttingDown, depth >= 0, depth < levels.count - 1 else { return }
         isZoomingIn = false
         // Going back one level returns to the exact tile. Further jumps zoom out from center.
-        zoomRect = depth == levels.count - 2 ? levels.last?.originRect : nil
+        if depth == levels.count - 2, let child = levels.last {
+            if let path = child.path, let parent = cache[levels[depth].id] {
+                zoomRect = tileRect(for: path, in: parent.entries)
+            } else {
+                zoomRect = child.originRect
+            }
+        } else {
+            zoomRect = nil
+        }
         zoomTint = levels.last?.tint
         levels.removeLast(levels.count - depth - 1)
         resetInteraction()
@@ -153,8 +162,13 @@ final class AnalyzeModel {
 
     /// Where an entry's tile sits in the current map, as fractions of the map.
     func tileRect(for entry: AnalyzeResult.Entry) -> CGRect? {
-        EntryMap(entries: entries, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-            .tiles.first { $0.id == entry.path }?.rect
+        tileRect(for: entry.path, in: entries)
+    }
+
+    private func tileRect(for path: String, in entries: [AnalyzeResult.Entry]) -> CGRect? {
+        let map = EntryMap(entries: entries, in: CGRect(origin: .zero, size: mapSize))
+        guard let rect = map.tiles.first(where: { $0.id == path })?.rect else { return nil }
+        return EntryMap.normalized(rect, in: mapSize)
     }
 
     func cancelScan() {

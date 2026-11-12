@@ -21,4 +21,10 @@ public struct EntryMap: Sendable {
             + (restSize > 0 ? [(id: Self.restID, size: Double(restSize))] : [])
         tiles = Treemap.layout(items: items, in: bounds)
     }
+
+    public static func normalized(_ rect: CGRect, in size: CGSize) -> CGRect? {
+        guard size.width > 0, size.height > 0 else { return nil }
+        return CGRect(x: rect.minX / size.width, y: rect.minY / size.height,
+                      width: rect.width / size.width, height: rect.height / size.height)
+    }
 }

@@ -564,7 +564,8 @@ struct LogFollowSettlingTests {
 /// folder grows from once ignored it, so the animation started away from the tile.
 @MainActor
 struct ZoomOriginTests {
-    @Test func aFolderGrowsFromWhereItsTileIsDrawn() async throws {
+    @Test(arguments: [CGSize(width: 800, height: 400), CGSize(width: 400, height: 800)])
+    func aFolderGrowsFromWhereItsTileIsDrawn(size: CGSize) async throws {
         let rows = (0..<40).map { #"{"name":"e\#($0)","path":"/fixture/e\#($0)","size":\#(1_000 - $0),"is_dir":true}"# }
         let json = #"{"path":"/fixture","entries":["# + rows.joined(separator: ",") + "]}"
         let model = AnalyzeModel(
@@ -574,11 +575,13 @@ struct ZoomOriginTests {
         )
         model.openRoot(cli: fixtureCLI)
         try await eventually { !model.isLoading && !model.entries.isEmpty }
-        let entry = try #require(model.entries.first)
+        model.mapSize = size
+        let entry = model.entries[1]
         let origin = try #require(model.tileRect(for: entry))
-        let map = EntryMap(entries: model.entries, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let map = EntryMap(entries: model.entries, in: CGRect(origin: .zero, size: size))
         #expect(map.restCount == 8)
-        #expect(origin == map.tiles.first { $0.id == entry.path }?.rect)
+        let tile = try #require(map.tiles.first { $0.id == entry.path })
+        #expect(origin == EntryMap.normalized(tile.rect, in: size))
         #expect(origin.width * origin.height < 1)
     }
 }

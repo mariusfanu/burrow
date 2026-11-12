@@ -37,6 +37,7 @@ struct TreemapStage: View {
         if let outgoing {
             TreemapLayer(snapshot: outgoing, model: model, cli: cli, isInteractive: false)
                 .modifier(ZoomEffect(progress: progress, rect: model.zoomRect, size: size, isZoomingIn: model.isZoomingIn, role: .outgoing))
+                .accessibilityHidden(true)
         }
     }
 

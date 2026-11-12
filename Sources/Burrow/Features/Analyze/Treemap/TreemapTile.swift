@@ -94,13 +94,7 @@ struct TreemapTile: View {
             reveal()
             return
         }
-        let normalized = CGRect(
-            x: rect.minX / max(container.width, 1),
-            y: rect.minY / max(container.height, 1),
-            width: rect.width / max(container.width, 1),
-            height: rect.height / max(container.height, 1)
-        )
-        model.open(entry, tint: color, rect: normalized, cli: cli)
+        model.open(entry, tint: color, rect: EntryMap.normalized(rect, in: container), cli: cli)
     }
 
     private func reveal() {

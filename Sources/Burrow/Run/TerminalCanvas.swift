@@ -58,12 +58,20 @@ final class TerminalCanvas: NSView {
         NSAccessibility.post(element: self, notification: .selectedTextChanged)
     }
 
-    @objc func copy(_ sender: Any?) { copyVisibleOutput(to: .general) }
+    @objc func copy(_ sender: Any?) { copyVisibleOutput(to: Self.writeToPasteboard) }
 
     /// Copies the current screen even when no range is selected, for quick diagnostics.
-    func copyVisibleOutput(to pasteboard: NSPasteboard) {
+    func copyVisibleOutput(to destination: (String) -> Void) {
+        destination(diagnosticText)
+    }
+
+    static func writeToPasteboard(_ text: String, pasteboard: NSPasteboard) {
         pasteboard.clearContents()
-        pasteboard.setString(diagnosticText, forType: .string)
+        pasteboard.setString(text, forType: .string)
+    }
+
+    private static func writeToPasteboard(_ text: String) {
+        writeToPasteboard(text, pasteboard: .general)
     }
 
     override func viewDidMoveToWindow() {

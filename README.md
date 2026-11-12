@@ -48,6 +48,8 @@ open build/Burrow.app
 
 The script packages the executable, icon and resources as `build/Burrow.app` for your Mac's architecture. It enables the hardened runtime and signs the app locally with an ad hoc signature, so you can build it without a paid Apple Developer account. Use `scripts/build-app.sh debug` for a debug bundle. To try a rebuild, quit the running copy before opening the new one. You can also copy the bundle to `/Applications`.
 
+`project.yml` supplies the bundle version and build number to both build paths. Both bundles use the same executable name, bundle ID and minimum macOS version. Xcode adds its platform and SDK metadata. The shell bundle supplies an explicit display name, copyright and high-resolution flag in its own Info.plist.
+
 ### Run in Xcode
 
 1. Open `Package.swift` in Xcode.
@@ -67,7 +69,8 @@ Run `swift test` from the repository root after making changes. The default suit
 ## Export a notarized app from Xcode
 
 Generate the macOS app project from `project.yml`. Xcode keeps the Burrow source
-folder in sync with files added, moved or renamed on disk.
+folder in sync with files added, moved or renamed on disk. XcodeGen 2.46.0 was
+used to verify project generation.
 
 ```bash
 brew install xcodegen
@@ -179,6 +182,8 @@ Core process tests exercise output backpressure, cancellation, coordinated shutd
 and process-group escalation using temporary fixtures.
 
 The default suite runs without Mole and exercises terminal behavior with test processes and fixtures.
+
+To check the real Terminal copy destination in a desktop session, run `BURROW_RUN_GUI_TESTS=1 swift test --filter TerminalAccessibilityTests`.
 
 Opt in to the host integration tests on a Mac with Mole installed and permission to access your Trash:
 

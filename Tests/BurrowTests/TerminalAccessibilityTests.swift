@@ -26,9 +26,17 @@ struct TerminalAccessibilityTests {
         view.selectAll(nil)
         #expect(view.accessibilitySelectedText() == view.diagnosticText)
         #expect(view.accessibilitySelectedTextRange().length == view.diagnosticText.utf16.count)
+        var copied: String?
+        view.copyVisibleOutput { copied = $0 }
+        #expect(copied == view.diagnosticText)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["BURROW_RUN_GUI_TESTS"] == "1",
+                   "Set BURROW_RUN_GUI_TESTS=1 in a desktop session to test the system pasteboard"))
+    func terminalOutputCanRoundTripThroughThePasteboard() {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
-        view.copyVisibleOutput(to: pasteboard)
-        #expect(pasteboard.string(forType: .string) == view.diagnosticText)
+        TerminalCanvas.writeToPasteboard("Terminal output", pasteboard: pasteboard)
+        #expect(pasteboard.string(forType: .string) == "Terminal output")
     }
 }

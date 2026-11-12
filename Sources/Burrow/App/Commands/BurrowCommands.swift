@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 /// The menu bar. Standard menus are kept, and every command the app offers appears here.
@@ -68,19 +67,5 @@ struct BurrowCommands: Commands {
                 FilePicker.reveal(AppModel.home + "/Library/Logs/mole/operations.log")
             }
         }
-    }
-}
-
-/// A menu item that stays in place and dims when the page has nothing to offer.
-private struct ActionMenuItem: View {
-    let action: PageAction?
-    let placeholder: String
-    let key: KeyEquivalent
-    let modifiers: EventModifiers
-
-    var body: some View {
-        Button(action?.title ?? placeholder) { action?.perform() }
-            .keyboardShortcut(key, modifiers: modifiers)
-            .disabled(action == nil || action?.isEnabled == false)
     }
 }

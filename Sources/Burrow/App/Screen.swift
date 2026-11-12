@@ -67,3 +67,16 @@ enum Screen: String, CaseIterable, Identifiable, Hashable {
         Group(title: "Inspect", screens: [.analyze, .status, .history]),
     ]
 }
+
+extension Screen {
+    /// The page a CLI command belongs to. Every command is named like its page except
+    /// `mo installer`.
+    init?(commandName: String) {
+        switch commandName {
+        case "installer": self = .installers
+        default:
+            guard let screen = Screen(rawValue: commandName) else { return nil }
+            self = screen
+        }
+    }
+}

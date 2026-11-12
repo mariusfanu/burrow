@@ -7,27 +7,23 @@ import Foundation
 extension HistoryReport.Session {
     /// The page name where there is one, so History and the sidebar agree.
     var title: String {
+        if let screen = Screen(commandName: commandName) { return screen.title }
         switch commandName {
-        case "clean": "Clean"
-        case "uninstall": "Uninstall"
-        case "purge": "Project Purge"
-        case "installer", "installers": "Installers"
-        case "slim": "Slim Apps"
-        case "optimize": "Optimize"
-        case "analyze": "Disk Explorer"
-        case "touchid": "Touch ID"
-        case "update": "Update"
-        case "completion": "Shell Completion"
-        case "remove": "Remove Mole"
-        default: commandName.capitalized
+        case "touchid": return "Touch ID"
+        case "update": return "Update"
+        case "completion": return "Shell Completion"
+        case "remove": return "Remove Mole"
+        default: return commandName.capitalized
         }
     }
 
-    /// The page's symbol, or a terminal for commands that only run in Settings.
+    /// The page's symbol, or a terminal for commands without a page.
     var symbol: String {
-        if commandName == "touchid" { return "touchid" }
-        if commandName == "update" { return "arrow.down.circle" }
-        return Screen.allCases.first { $0.rawValue.hasPrefix(commandName) }?.symbol ?? "terminal"
+        switch commandName {
+        case "touchid": "touchid"
+        case "update": "arrow.down.circle"
+        default: Screen(commandName: commandName)?.symbol ?? "terminal"
+        }
     }
 
     var startedDate: Date? { startedAt.flatMap(HistoryDate.parse) }

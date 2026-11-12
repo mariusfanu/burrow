@@ -10,9 +10,19 @@ struct HistoryPresentationTests {
     }
 
     @Test func commandsReadAsPageNames() throws {
+        #expect(try session(#"{"command":"installer"}"#).title == "Installers")
+        #expect(try session(#"{"command":"analyze"}"#).title == "Disk Explorer")
         #expect(try session(#"{"command":"touchid"}"#).title == "Touch ID")
         #expect(try session(#"{"command":"purge-dry-run"}"#).title == "Project Purge")
         #expect(try session(#"{"command":"something-new"}"#).title == "Something-New")
+    }
+
+    @Test func commandSymbolsComeFromTheExactPage() throws {
+        #expect(try session(#"{"command":"clean"}"#).symbol == "sparkles")
+        #expect(try session(#"{"command":"installer"}"#).symbol == "shippingbox")
+        #expect(try session(#"{"command":"touchid"}"#).symbol == "touchid")
+        #expect(try session(#"{"command":"something-new"}"#).symbol == "terminal")
+        #expect(try session(#"{"command":""}"#).symbol == "terminal")
     }
 
     @Test func emptyColumnsStayEmptyAndCountsInflect() throws {

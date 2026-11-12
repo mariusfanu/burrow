@@ -6,6 +6,21 @@ import BurrowCore
 
 @MainActor
 struct StatusStoreTests {
+    @Test func aFinalBurstIsAppliedInOrderBeforeRetry() async throws {
+        let (store, commands) = started()
+        try await eventually { await commands.streams.count == 1 }
+        await commands.emit(0, "{\"host\":\"first\"}\n{\"host\":\"last\"}\n")
+        await commands.finishStream(0, status: 1)
+        try await eventually { await commands.streams.count == 2 }
+        #expect(store.snapshot?.host == "last")
+        #expect(store.sampleCount == 2)
+        #expect(!store.hasFreshSample)
+        await commands.emit(1, "{\"host\":\"new attempt\"}\n")
+        try await eventually { store.hasFreshSample }
+        store.stop()
+        await commands.finishStream(1)
+    }
+
     private func started() -> (StatusStore, ScriptedCommands) {
         let commands = ScriptedCommands()
         let store = StatusStore(commands: commands.client, retryDelay: .zero)

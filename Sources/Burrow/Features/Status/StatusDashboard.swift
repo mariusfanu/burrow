@@ -8,7 +8,7 @@ struct StatusDashboard: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Space.cluster) {
-                StatusHealthStrip(snapshot: snapshot, sampleID: store.sampleCount, isLive: store.isRunning && store.errorMessage == nil)
+                StatusHealthStrip(snapshot: snapshot, sampleID: store.sampleCount, isLive: store.hasFreshSample && store.errorMessage == nil)
                     .arrives()
                 if let message = store.errorMessage {
                     InlineNotice(text: message)

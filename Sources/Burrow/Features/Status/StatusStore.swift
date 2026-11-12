@@ -16,9 +16,9 @@ final class StatusStore {
     private var currentInterval = 0
     private var currentCLI: CLIInfo?
     private var streamID = UUID()
-    private var sampleSourceID = UUID()
-    /// Whether the current process has produced a sample, which clears its failed attempts.
-    private var sourceDeliveredSample = false
+    private var freshnessTask: Task<Void, Never>?
+    private let freshnessClock: any Clock<Duration>
+    private(set) var hasFreshSample = false
     private let commands: CommandClient
     private let retryDelay: Duration
     private let gpuReadings: @Sendable () -> [GPUReading]
@@ -31,11 +31,13 @@ final class StatusStore {
     init(
         commands: CommandClient = CommandClient(),
         retryDelay: Duration = .seconds(3),
+        freshnessClock: any Clock<Duration> = ContinuousClock(),
         gpuReadings: @escaping @Sendable () -> [GPUReading] = GPUStatistics.read
     ) {
         self.commands = commands
         self.retryDelay = retryDelay
         self.gpuReadings = gpuReadings
+        self.freshnessClock = freshnessClock
     }
 
     /// Restarts when the interval or CLI changes, or the previous stream has finished.
@@ -56,6 +58,7 @@ final class StatusStore {
                 if let self, self.streamID == id {
                     self.task = nil
                     self.isRunning = false
+                    self.clearFreshness()
                 }
             }
             // Three failures in a row end the stream. A process that worked and later exited
@@ -63,42 +66,33 @@ final class StatusStore {
             var failures = 0
             while failures < 3 {
                 guard !Task.isCancelled else { return }
-                let sourceID = UUID()
-                self?.sampleSourceID = sourceID
-                self?.sourceDeliveredSample = false
-                let sink: @MainActor @Sendable (StatusSnapshot) -> Void = { [weak self] snapshot in
-                    guard let self, self.streamID == id, self.sampleSourceID == sourceID, self.isRunning else { return }
-                    self.sourceDeliveredSample = true
-                    self.ingest(snapshot)
+                let (events, continuation) = AsyncStream<SampleEvent>.makeStream()
+                async let exit = Self.readSamples(
+                    cli: cli, interval: interval, commands: commands,
+                    gpuReadings: gpuReadings, into: continuation
+                )
+                var deliveredSample = false
+                for await event in events {
+                    guard !Task.isCancelled, self?.streamID == id else { return }
+                    switch event {
+                    case .sample(let snapshot):
+                        deliveredSample = true
+                        self?.ingest(snapshot)
+                        self?.markFresh(interval: interval)
+                    case .unreadable:
+                        self?.errorMessage = "Mole’s status output couldn’t be read. A different version of Mole may have changed its format."
+                    }
                 }
-                let unreadable: @MainActor @Sendable () -> Void = { [weak self] in
-                    guard let self, self.streamID == id, self.sampleSourceID == sourceID else { return }
-                    self.errorMessage = "Mole’s status output couldn’t be read. A different version of Mole may have changed its format."
-                }
-                // A truncated JSON line from a failed process must not contaminate its replacement.
-                let parser = NDJSONParser()
                 do {
-                    let status = try await commands.stream(
-                        cli.executable, ["status", "--watch", "--interval", "\(interval)s"], { chunk in
-                            let snapshots = parser.feed(chunk)
-                            let rejectedLines = parser.takeRejectedLines()
-                            if snapshots.isEmpty, rejectedLines > 0 {
-                                Task { @MainActor in unreadable() }
-                            }
-                            for snapshot in snapshots {
-                                let snapshot = snapshot.fillingMissingGPUUsage(from: gpuReadings)
-                                Task { @MainActor in sink(snapshot) }
-                            }
-                        }
-                    )
+                    let status = try await exit
                     guard !Task.isCancelled, self?.streamID == id else { return }
                     self?.errorMessage = "The status stream stopped (status \(status)). Retrying…"
                 } catch {
                     guard !Task.isCancelled, self?.streamID == id else { return }
                     self?.errorMessage = error.localizedDescription
                 }
-                await Task.yield()
-                failures = self?.sourceDeliveredSample == true ? 1 : failures + 1
+                self?.clearFreshness()
+                failures = deliveredSample ? 1 : failures + 1
                 if failures < 3 { try? await Task.sleep(for: retryDelay) }
             }
             if !Task.isCancelled, self?.streamID == id {
@@ -118,6 +112,46 @@ final class StatusStore {
         task?.cancel()
         task = nil
         isRunning = false
+        clearFreshness()
+    }
+
+    private enum SampleEvent: Sendable {
+        case sample(StatusSnapshot)
+        case unreadable
+    }
+
+    private nonisolated static func readSamples(
+        cli: CLIInfo, interval: Int, commands: CommandClient,
+        gpuReadings: @escaping @Sendable () -> [GPUReading],
+        into events: AsyncStream<SampleEvent>.Continuation
+    ) async throws -> Int32 {
+        defer { events.finish() }
+        let parser = NDJSONParser()
+        return try await commands.stream(cli.executable, ["status", "--watch", "--interval", "\(interval)s"]) { chunk in
+            let snapshots = parser.feed(chunk)
+            let rejectedLines = parser.takeRejectedLines()
+            if snapshots.isEmpty, rejectedLines > 0 { events.yield(.unreadable) }
+            for snapshot in snapshots {
+                events.yield(.sample(snapshot.fillingMissingGPUUsage(from: gpuReadings)))
+            }
+        }
+    }
+
+    private func markFresh(interval: Int) {
+        freshnessTask?.cancel()
+        hasFreshSample = true
+        let clock = freshnessClock
+        freshnessTask = Task { [weak self] in
+            try? await clock.sleep(for: .seconds(max(1, interval)) * 3)
+            guard !Task.isCancelled else { return }
+            self?.hasFreshSample = false
+        }
+    }
+
+    private func clearFreshness() {
+        freshnessTask?.cancel()
+        freshnessTask = nil
+        hasFreshSample = false
     }
 
     private func ingest(_ snapshot: StatusSnapshot) {

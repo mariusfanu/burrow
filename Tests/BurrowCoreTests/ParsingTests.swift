@@ -408,6 +408,15 @@ struct CLIOutputKnowledgeTests {
         #expect(parser.takeRejectedLines() == 1)
         #expect(parser.takeRejectedLines() == 0)
     }
+
+    @Test func oversizedAndUnrecognizedStatusRecordsAreDiscarded() {
+        let parser = NDJSONParser(maximumLineBytes: 40)
+        #expect(parser.feed(Data(repeating: 0x78, count: 100)).isEmpty)
+        #expect(parser.takeRejectedLines() == 1)
+        let recovered = parser.feed(Data("tail\n{}\n{\"unknown\":true}\n{\"host\":\"current\"}\n".utf8))
+        #expect(recovered.map(\.host) == ["current"])
+        #expect(parser.takeRejectedLines() == 2)
+    }
 }
 
 struct PromptWordingTests {

@@ -115,6 +115,13 @@ public struct StatusSnapshot: Decodable, Sendable, Equatable {
         try JSONDecoder.forCLI().decode(StatusSnapshot.self, from: data)
     }
 
+    var containsReadings: Bool {
+        host != nil || uptime != nil || procs != nil || hardware != nil || healthScore != nil
+            || healthScoreMsg != nil || cpu != nil || gpu != nil || memory != nil || disks != nil
+            || trashSize != nil || diskIo != nil || network != nil || proxy != nil || batteries != nil
+            || thermal != nil || bluetooth != nil || topProcesses != nil || zombieCount != nil
+    }
+
     public var totalDownload: Double {
         (network ?? []).compactMap(\.rxRateMbs).reduce(0, +)
     }

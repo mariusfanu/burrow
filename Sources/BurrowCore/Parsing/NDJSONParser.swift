@@ -6,11 +6,15 @@ public final class NDJSONParser: Sendable {
     private struct State {
         var buffer = Data()
         var rejectedLines = 0
+        var discardsUntilNewline = false
     }
 
     private let state = Mutex(State())
+    private let maximumLineBytes: Int
 
-    public init() {}
+    public init() { maximumLineBytes = 4 * 1024 * 1024 }
+
+    init(maximumLineBytes: Int) { self.maximumLineBytes = maximumLineBytes }
 
     /// How many complete lines weren't a snapshot since the last time this was asked.
     public func takeRejectedLines() -> Int {
@@ -22,16 +26,31 @@ public final class NDJSONParser: Sendable {
 
     public func feed(_ chunk: Data) -> [StatusSnapshot] {
         state.withLock { state in
-            state.buffer.append(chunk)
             var snapshots: [StatusSnapshot] = []
-            while let newline = state.buffer.firstIndex(of: 0x0A) {
-                let line = state.buffer[state.buffer.startIndex..<newline]
-                state.buffer.removeSubrange(state.buffer.startIndex...newline)
-                if let snapshot = try? StatusSnapshot.decode(Data(line)) {
-                    snapshots.append(snapshot)
-                } else if !line.isEmpty {
-                    state.rejectedLines += 1
+            var start = chunk.startIndex
+            while start < chunk.endIndex {
+                let newline = chunk[start...].firstIndex(of: 0x0A)
+                let part = chunk[start..<(newline ?? chunk.endIndex)]
+                if !state.discardsUntilNewline {
+                    if part.count > maximumLineBytes - state.buffer.count {
+                        state.buffer.removeAll()
+                        state.rejectedLines += 1
+                        state.discardsUntilNewline = true
+                    } else {
+                        state.buffer.append(part)
+                    }
                 }
+                guard let newline else { break }
+                if !state.buffer.isEmpty {
+                    if let snapshot = try? StatusSnapshot.decode(state.buffer), snapshot.containsReadings {
+                        snapshots.append(snapshot)
+                    } else {
+                        state.rejectedLines += 1
+                    }
+                    state.buffer.removeAll(keepingCapacity: true)
+                }
+                state.discardsUntilNewline = false
+                start = chunk.index(after: newline)
             }
             return snapshots
         }

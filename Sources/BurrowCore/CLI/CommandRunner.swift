@@ -43,9 +43,9 @@ public enum CommandRunner {
         let box = ProcessBox(lifecycle: lifecycle)
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int32, Error>) in
-                let drainGroup = DispatchGroup()
-                drain(outPipe, group: drainGroup, into: onStdout)
-                drain(errPipe, group: drainGroup, into: onStderr)
+                let drain = PipeDrain()
+                drain.read(outPipe, into: onStdout)
+                drain.read(errPipe, into: onStderr)
 
                 do {
                     try box.start(executable: executable, arguments: arguments, environment: environment,
@@ -55,8 +55,7 @@ public enum CommandRunner {
                     try? outPipe.fileHandleForWriting.close()
                     try? errPipe.fileHandleForWriting.close()
                 } catch {
-                    outPipe.fileHandleForReading.readabilityHandler = nil
-                    errPipe.fileHandleForReading.readabilityHandler = nil
+                    drain.stop(outPipe, errPipe)
                     try? outPipe.fileHandleForWriting.close()
                     try? errPipe.fileHandleForWriting.close()
                     continuation.resume(throwing: error)
@@ -64,14 +63,17 @@ public enum CommandRunner {
                 }
 
                 box.wait { status, reason in
-                    // A detached helper may hold a pipe open. Bound the final drain too.
-                    _ = drainGroup.wait(timeout: .now() + 1)
-                    outPipe.fileHandleForReading.readabilityHandler = nil
-                    errPipe.fileHandleForReading.readabilityHandler = nil
-                    switch reason {
-                    case .timedOut: continuation.resume(throwing: CommandError.timedOut)
-                    case .cancelled: continuation.resume(throwing: CancellationError())
-                    case nil: continuation.resume(returning: status)
+                    // A detached helper may keep a writer open. Stop accepting reads after
+                    // the deadline, then let already admitted callbacks finish.
+                    let reachedEOF = drain.waitForEOF()
+                    drain.stop(outPipe, errPipe)
+                    drain.deliveries.notify(queue: .global()) {
+                        switch reason {
+                        case .timedOut: continuation.resume(throwing: CommandError.timedOut)
+                        case .cancelled: continuation.resume(throwing: CancellationError())
+                        case nil where reachedEOF: continuation.resume(returning: status)
+                        case nil: continuation.resume(throwing: CommandError.incompleteOutput)
+                        }
                     }
                 }
 
@@ -86,18 +88,44 @@ public enum CommandRunner {
         }
     }
 
-    /// Hands a pipe's chunks to `handler`, staying in `group` until it reaches EOF.
-    private static func drain(_ pipe: Pipe, group: DispatchGroup, into handler: @escaping @Sendable (Data) -> Void) {
-        group.enter()
-        pipe.fileHandleForReading.readabilityHandler = { handle in
+}
+
+private final class PipeDrain: Sendable {
+    private let endOfFile = DispatchGroup()
+    let deliveries = DispatchGroup()
+    private let acceptingReads = Mutex(true)
+
+    func read(_ pipe: Pipe, into handler: @escaping @Sendable (Data) -> Void) {
+        endOfFile.enter()
+        pipe.fileHandleForReading.readabilityHandler = { [self] handle in
+            let admitted = acceptingReads.withLock { accepting in
+                if accepting { deliveries.enter() }
+                return accepting
+            }
+            guard admitted else { return }
+            defer { deliveries.leave() }
             let data = handle.availableData
             if data.isEmpty {
                 handle.readabilityHandler = nil
-                group.leave()
+                endOfFile.leave()
             } else {
                 handler(data)
             }
         }
+    }
+
+    func stop(_ output: Pipe, _ error: Pipe) {
+        acceptingReads.withLock { $0 = false }
+        output.fileHandleForReading.readabilityHandler = nil
+        error.fileHandleForReading.readabilityHandler = nil
+    }
+
+    func waitForEOF() -> Bool {
+        if endOfFile.wait(timeout: .now() + 1) == .success { return true }
+        guard deliveries.wait(timeout: .now()) == .timedOut else { return false }
+        // FileHandle can wait for the previous callback before reporting EOF.
+        deliveries.wait()
+        return endOfFile.wait(timeout: .now() + 1) == .success
     }
 }
 

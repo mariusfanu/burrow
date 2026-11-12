@@ -1,8 +1,29 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import BurrowCore
 
 struct CommandRunnerTests {
+    @Test func completionWaitsForTheLastOutputCallback() async throws {
+        let delivered = Mutex(false)
+        let status = try await CommandRunner.stream(executable: "/bin/sh", arguments: ["-c", "printf FINAL"]) { _ in
+            Thread.sleep(forTimeInterval: 1.2)
+            delivered.withLock { $0 = true }
+        }
+        #expect(status == 0)
+        #expect(delivered.withLock { $0 })
+    }
+
+    @Test func aDescendantHoldingThePipeOpenReportsIncompleteOutput() async {
+        do {
+            _ = try await CommandRunner.run(executable: "/bin/sh", arguments: ["-c", "/bin/sleep 2 & printf PARTIAL"])
+            Issue.record("Expected incomplete output")
+        } catch CommandError.incompleteOutput {
+            // The child exited and a descendant still had a writer.
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
     @Test(arguments: [nil, 60] as [TimeInterval?])
     func completedCommandReleasesItsLifecycleBeforeTheTimeout(timeout: TimeInterval?) async throws {
         var lifecycle: ProcessLifecycle? = ProcessLifecycle()

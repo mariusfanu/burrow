@@ -256,7 +256,7 @@ private struct CPUCard: View {
                 if let perCore = snapshot.cpu?.perCore, !perCore.isEmpty {
                     CoreBars(values: perCore)
                 }
-                Text("Load \(String(format: "%.2f", snapshot.cpu?.load1 ?? 0)) · \(snapshot.cpu?.coreCount ?? 0) cores")
+                Text("Load \((snapshot.cpu?.load1 ?? 0).formatted(.number.precision(.fractionLength(2)))) · \(snapshot.cpu?.coreCount ?? 0) cores")
                     .font(.callout)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
@@ -427,7 +427,7 @@ private struct GPUCard: View {
             VStack(alignment: .leading, spacing: Theme.Space.row) {
                 CardTitle(title: "GPU", symbol: "display")
                 if let usage = gpu?.usage, usage >= 0 {
-                    ValueLine(value: String(format: "%.0f", usage), unit: "%", number: usage)
+                    ValueLine(value: usage.formatted(.number.precision(.fractionLength(0))), unit: "%", number: usage)
                     LevelBar(fraction: usage / 100, tint: StatusTint.load(usage))
                 } else {
                     Text("Usage isn’t reported")
@@ -450,7 +450,7 @@ private struct PowerCard: View {
             VStack(alignment: .leading, spacing: Theme.Space.row) {
                 if let battery = snapshot.batteries?.first {
                     CardTitle(title: "Battery", symbol: "battery.75percent")
-                    ValueLine(value: String(format: "%.0f", battery.percent ?? 0), unit: "%", number: battery.percent ?? 0)
+                    ValueLine(value: (battery.percent ?? 0).formatted(.number.precision(.fractionLength(0))), unit: "%", number: battery.percent ?? 0)
                     LevelBar(fraction: (battery.percent ?? 0) / 100, tint: StatusTint.battery(percent: battery.percent, status: battery.status))
                     Text(batteryLine(battery))
                         .font(.callout)
@@ -458,7 +458,7 @@ private struct PowerCard: View {
                 } else {
                     CardTitle(title: "Power", symbol: "bolt")
                     ValueLine(
-                        value: String(format: "%.1f", snapshot.thermal?.systemPower ?? 0),
+                        value: (snapshot.thermal?.systemPower ?? 0).formatted(.number.precision(.fractionLength(1))),
                         unit: "W",
                         number: snapshot.thermal?.systemPower ?? 0
                     )
@@ -591,7 +591,7 @@ private struct ProcessRow: View {
                 .truncationMode(.middle)
                 .help(process.command ?? "")
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(String(format: "%.1f%%", process.cpu ?? 0))
+            Text("\((process.cpu ?? 0).formatted(.number.precision(.fractionLength(1))))%")
                 .foregroundStyle((process.cpu ?? 0) > 50 ? Color.orange : Color.primary)
                 .frame(width: 70, alignment: .trailing)
             Text((process.memoryBytes ?? 0).memorySize)

@@ -12,6 +12,7 @@ What has been simplified, what was measured, and what was deliberately left alon
 - **P2 Disk Explorer consistency.** Disk changes cancel obsolete scans, clear cached folders and disable mutations until a current result arrives. Missing paths leave the map without contributing to the move count or Undo. All 22 focused Disk Explorer and Trash tests passed.
 - **P2 Clean path list.** The preview attaches a path list only when the command announces the expected file and it changed during the run. An unavailable list leaves the summary intact. The shared Mole file still limits attribution across concurrent CLI processes. All 13 focused Clean, parser and scan ownership tests passed.
 - **P2 Linked settings and external edits.** Saves preserve verified final symlinks, Maintenance applies a single change to current settings, and Purge keeps the draft when its source changes. The shared list parser moved into the config layer. All 27 focused config and settings tests passed.
+- **P2 PTY descriptors.** Darwin's exec-in-place spawn flags preserve the session created by `forkpty` and keep only standard input, output and error. A standalone probe confirmed that fd 1200 is closed in the child. The focused PTY, process and CLI run reported 26 tests with eight host-only skips.
 
 ## Core hygiene follow-up — 12 November 2026
 

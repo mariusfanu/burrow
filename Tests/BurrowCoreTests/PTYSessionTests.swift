@@ -1,8 +1,28 @@
 import Foundation
+import Darwin
 import Testing
 @testable import BurrowCore
 
 struct PTYSessionTests {
+    @Test(.enabled(if: {
+        var limit = rlimit()
+        return getrlimit(RLIMIT_NOFILE, &limit) == 0 && limit.rlim_cur > 1200
+    }(), "Requires a file descriptor above 1200"))
+    func theChildInheritsTheTerminalButNoHighFileDescriptor() async throws {
+        let source = open("/dev/null", O_RDONLY)
+        try #require(source >= 0)
+        defer { close(source) }
+        let high = fcntl(source, F_DUPFD, 1200)
+        try #require(high >= 1200)
+        defer { close(high) }
+        let session = try PTYSession(
+            executable: "/bin/sh",
+            arguments: ["-c", "test -t 0 && test -t 1 && test -t 2 && test ! -e /dev/fd/\(high)"],
+            environment: CLILocator.environment()
+        )
+        #expect(await session.waitForExit() == 0)
+    }
+
     @Test func backpressureDoesNotBlockEchoOrCancellation() async throws {
         let lifecycle = ProcessLifecycle()
         let session = try PTYSession(

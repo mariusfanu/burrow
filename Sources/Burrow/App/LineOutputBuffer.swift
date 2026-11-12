@@ -1,33 +1,37 @@
 import BurrowCore
 import Foundation
+import Synchronization
 
 /// Collects piped output from a background queue and tracks the latest full line.
-final class LineOutputBuffer: @unchecked Sendable {
-    private let lock = NSLock()
-    private var assembler = LineAssembler()
-    private var lines: [String] = []
-    private var latest = ""
+final class LineOutputBuffer: Sendable {
+    private struct State {
+        var assembler = LineAssembler()
+        var lines: [String] = []
+        var latest = ""
+    }
+
+    private let state = Mutex(State())
 
     func append(_ chunk: Data) {
-        lock.withLock {
-            for line in assembler.feed(chunk) {
-                lines.append(line.text)
+        state.withLock { state in
+            for line in state.assembler.feed(chunk) {
+                state.lines.append(line.text)
                 if !LogLine.isDecoration(line.text) {
-                    latest = line.text
+                    state.latest = line.text
                 }
             }
         }
     }
 
     func finish() -> [String] {
-        lock.withLock {
-            let tail = assembler.partial
-            if !tail.isEmpty { lines.append(tail) }
-            return lines
+        state.withLock { state in
+            let tail = state.assembler.partial
+            if !tail.isEmpty { state.lines.append(tail) }
+            return state.lines
         }
     }
 
     var latestLine: String {
-        lock.withLock { latest }
+        state.withLock { $0.latest }
     }
 }

@@ -2,11 +2,18 @@
 
 What has been simplified, what was measured, and what was deliberately left alone. Keep this current as work continues, so that the same ideas don't get tried twice.
 
+## Core hygiene follow-up — 12 November 2026
+
+- **6.1. Checked sendability for three buffers.** Command output, assembled
+  lines and status JSON each put their mutable state behind a
+  `Synchronization.Mutex`. Debug and release each reported 320 tests, and the
+  release bundle passed strict signature verification.
+
 ## November refactor — 12 November 2026
 
 Implemented the required steps in [the refactor plan](refactor-plan.md) on
 `refactor/review-2026-11`, starting from `d9dce44`. Each implementation step
-has its own commit. Phase 6 is opt-in and was skipped.
+has its own commit. The optional Phase 6 follow-up is recorded above.
 
 - **Search, formatting and allocation.** Uninstall matches case and accents in
   app names and bundle IDs. Status numbers use locale-aware formatting. History

@@ -1,6 +1,7 @@
 import CPTY
 import Darwin
 import Foundation
+import Synchronization
 
 /// Runs commands without a terminal, for read-only work such as JSON and previews.
 public enum CommandRunner {
@@ -207,15 +208,14 @@ private final class ProcessBox: @unchecked Sendable {
     }
 }
 
-private final class OutputBuffer: @unchecked Sendable {
-    private let lock = NSLock()
-    private var data = Data()
+private final class OutputBuffer: Sendable {
+    private let data = Mutex(Data())
 
     func append(_ chunk: Data) {
-        lock.withLock { data.append(chunk) }
+        data.withLock { $0.append(chunk) }
     }
 
     var text: String {
-        lock.withLock { String(decoding: data, as: UTF8.self) }
+        data.withLock { String(decoding: $0, as: UTF8.self) }
     }
 }

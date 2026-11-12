@@ -87,7 +87,7 @@ import Testing
 
         try await driver.select([target])
         #expect(driver.snapshot?.reportedSelectedCount == 1)
-        driver.confirm()
+        try driver.confirm()
 
         // The CLI's own final question comes back to the caller, which relays it to the user.
         if let prompt = try await waitForPrompt(terminal), case .confirm = prompt {
@@ -188,7 +188,7 @@ import Testing
         try #require(target.index >= 50)
         try await driver.select([target])
         #expect(driver.snapshot?.reportedSelectedCount == 1)
-        driver.confirm()
+        try driver.confirm()
         if let prompt = try await waitForPrompt(terminal), case .confirm = prompt {
             terminal.send("\r")
         }
@@ -230,6 +230,9 @@ import Testing
             ((cursor >= top+page)) && top=$((cursor-page+1))
           elif [[ $key == ' ' ]]; then
             selected[cursor]=$((1-selected[cursor]))
+          elif [[ $key == f ]]; then
+            selected=(1 0 0 0 0)
+            printf 'Fixture swapped marks\r\n'
           elif [[ $key == '' ]]; then
             printf 'CHOSEN:%s\r\n' "${selected[*]}" > "$(dirname "$0")/result"
             exit 0
@@ -258,11 +261,30 @@ import Testing
         #expect(items.filter(\.preselected).map(\.index) == [4])
 
         try await driver.select([items[1]])
-        driver.confirm()
+        try driver.confirm()
         _ = await terminal.waitForExit()
 
         let result = try String(contentsOfFile: directory + "/result", encoding: .utf8)
         #expect(result.contains("CHOSEN:0 1 0 0 0"))
+    }
+
+    @Test func aSameCountSelectionSwapStopsBeforeEnter() async throws {
+        let (terminal, directory) = try await fakeMenu()
+        defer { terminal.cancel() }
+        let driver = MenuDriver(terminal: terminal)
+        _ = try #require(try await driver.waitForMenu(timeout: 20))
+        let items = try await driver.readItems()
+        terminal.send("f")
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(2)
+        while driver.snapshot?.cursor?.isSelected != true, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(driver.snapshot?.cursor?.isSelected == true)
+        await #expect(throws: MenuDriverError.self) { try await driver.select([items[4]]) }
+        driver.quit()
+        _ = await terminal.waitForExit()
+        #expect(!FileManager.default.fileExists(atPath: directory + "/result"))
     }
 
     @Test func aCountThatDoesNotAddUpStopsBeforeEnter() async throws {

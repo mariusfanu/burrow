@@ -18,6 +18,7 @@ public final class MenuDriver {
     private var cursorIndex = 0
     private var cachedRevision = -1
     private var cachedSnapshot: MenuSnapshot?
+    private var verifiedRevision: Int?
 
     public init(terminal: CLITerminal) {
         self.terminal = terminal
@@ -51,6 +52,8 @@ public final class MenuDriver {
     /// Reads the whole list by walking the cursor from top to bottom, then returns to
     /// the top. `progress` receives the number of rows read and the total.
     public func readItems(progress: ((Int, Int) -> Void)? = nil) async throws -> [MenuItem] {
+        verifiedRevision = nil
+        knownItems = []
         guard let first = snapshot, first.cursor != nil else { throw MenuDriverError.menuClosed }
         // The cursor starts on the first row.
         cursorIndex = 0
@@ -65,7 +68,6 @@ public final class MenuDriver {
         let readsPaths = first.focusedPath != nil
 
         var items: [MenuItem] = []
-        items.reserveCapacity(total)
         if !isPaged, !readsPaths {
             items = first.rows.enumerated().map { MenuItem.parse(row: $0.element, index: $0.offset) }
         } else {
@@ -121,12 +123,14 @@ public final class MenuDriver {
     /// Sets the selection to exactly `wanted`, including rows on other pages, then
     /// verifies the result against the CLI's own count. Call `readItems` first.
     public func select(_ wanted: [MenuItem]) async throws {
+        verifiedRevision = nil
         guard !knownItems.isEmpty else {
             throw MenuDriverError.verificationFailed("the list hasn't been read")
         }
-        let wantedByIndex = Dictionary(uniqueKeysWithValues: wanted.map { ($0.index, $0) })
-        for index in wantedByIndex.keys where !knownItems.indices.contains(index) {
-            throw MenuDriverError.verificationFailed("row \(index + 1) isn't in the list")
+        let wantedByIndex = Dictionary(wanted.map { ($0.index, $0) }, uniquingKeysWith: { first, _ in first })
+        guard wantedByIndex.count == wanted.count, !wanted.isEmpty,
+              wantedByIndex.keys.allSatisfy(knownItems.indices.contains) else {
+            throw MenuDriverError.verificationFailed("the selection contains invalid rows")
         }
 
         for known in knownItems {
@@ -136,16 +140,26 @@ public final class MenuDriver {
             guard known.preselected || shouldSelect else { continue }
             let expected = wantedItem?.rowText ?? known.rowText
             try await moveCursor(to: known.index, expecting: expected)
+            if let path = known.path {
+                try await waitUntil { [self] in snapshot?.focusedPath == path }
+            }
+            guard let before = snapshot, let row = before.cursor,
+                  focusedIndex(in: before) == known.index, row.text == expected,
+                  row.isSelected == known.preselected else {
+                throw MenuDriverError.verificationFailed("row \(known.index + 1) changed since the scan")
+            }
             guard known.preselected != shouldSelect else { continue }
 
-            let before = snapshot?.reportedSelectedCount
+            let beforeCount = before.reportedSelectedCount
             terminal.send(" ")
             try await waitUntil { [self] in
-                guard let menu = snapshot, let cursor = menu.cursor, cursor.isSelected == shouldSelect else {
+                guard let menu = snapshot, let cursor = menu.cursor, focusedIndex(in: menu) == known.index,
+                      cursor.text == expected, cursor.isSelected == shouldSelect,
+                      known.path.map({ menu.focusedPath == $0 }) ?? true else {
                     return false
                 }
-                guard let before else { return true }
-                return menu.reportedSelectedCount == before + (shouldSelect ? 1 : -1)
+                guard let beforeCount, (0...knownItems.count).contains(beforeCount) else { return false }
+                return menu.reportedSelectedCount == beforeCount + (shouldSelect ? 1 : -1)
             }
         }
 
@@ -160,11 +174,33 @@ public final class MenuDriver {
         guard (final.reportedTotal ?? final.rows.count) == knownItems.count else {
             throw MenuDriverError.verificationFailed("the list changed length")
         }
+        guard let focus = focusedIndex(in: final), let cursor = final.rows.firstIndex(where: \.isCursor),
+              final.rows.enumerated().allSatisfy({ offset, row in
+                  let index = focus + (offset - cursor)
+                  return knownItems.indices.contains(index) && row.text == knownItems[index].rowText
+                      && row.isSelected == (wantedByIndex[index] != nil)
+              }) else {
+            throw MenuDriverError.verificationFailed("the visible selection changed during verification")
+        }
+        verifiedRevision = terminal.screen.revision
     }
 
     /// Presses Enter on the verified selection.
-    public func confirm() {
+    public func confirm() throws {
+        try Task.checkCancellation()
+        guard terminal.isRunning, verifiedRevision == terminal.screen.revision else {
+            throw MenuDriverError.verificationFailed("the menu changed before confirmation")
+        }
+        verifiedRevision = nil
         terminal.send("\r")
+    }
+
+    private func focusedIndex(in menu: MenuSnapshot) -> Int? {
+        if let position = menu.position {
+            guard position.current > 0, position.current <= knownItems.count else { return nil }
+            return position.current - 1
+        }
+        return menu.rows.firstIndex(where: \.isCursor)
     }
 
     /// Leaves the menu without choosing anything.

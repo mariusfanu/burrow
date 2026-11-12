@@ -172,6 +172,7 @@ final class MenuFlowModel {
                     abandon(because: Self.previewChangedReason)
                     return
                 }
+                try driver.confirm()
                 run.clearLog()
                 run.isLogSuppressed = false
                 run.retitle(
@@ -179,7 +180,6 @@ final class MenuFlowModel {
                     doneTitle: isPreviewRun ? "Preview Finished" : configuration.doneTitle
                 )
                 state = .running
-                driver.confirm()
             } catch is CancellationError {
                 return
             } catch {

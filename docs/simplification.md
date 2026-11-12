@@ -5,6 +5,7 @@ What has been simplified, what was measured, and what was deliberately left alon
 ## Refactor follow-up implementation
 
 - **P1 Uninstall approval.** A disposable PTY reproduced both raw Return and a native Yes response reaching the child before validation. Guarded runs now show read-only Terminal output and validate the current request, full app plan and prompt count at approval. The launcher owns the default Trash mode and rejects option-like app names. All 23 focused Uninstall, targeting and Run Controller tests passed on macOS 27.3.
+- **P1 Menu selection.** A fixture swapped two marks while leaving the selection count unchanged. The original driver accepted the selection. The driver now verifies live marks, paths when available, the visible rows and the final screen revision before Enter. The focused menu run reported 21 tests with eight host-only skips.
 
 ## Core hygiene follow-up — 12 November 2026
 

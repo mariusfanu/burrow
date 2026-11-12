@@ -19,7 +19,7 @@ struct RunPanel: View {
                     .padding(Theme.Space.item)
                     .transition(Motion.materialize)
             } else {
-                content
+                RunPanelContent(run: run, showsDetails: $showsDetails)
             }
             if isSheet {
                 SheetControls(run: run, close: close)
@@ -40,9 +40,14 @@ struct RunPanel: View {
         .sensoryFeedback(.levelChange, trigger: run.didSucceed) { _, succeeded in succeeded }
         .onChange(of: run.phase) { Announcer.say(run.completionAnnouncement) }
     }
+}
 
-    @ViewBuilder
-    private var content: some View {
+/// What the panel shows in place of the terminal: the result, the log, or both.
+struct RunPanelContent: View {
+    let run: RunController
+    @Binding var showsDetails: Bool
+
+    var body: some View {
         if isFinished, !showsLogByDefault {
             CompletionView(run: run, showsDetails: $showsDetails)
                 .transition(Motion.materialize)

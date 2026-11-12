@@ -353,7 +353,7 @@ private struct CleanPathRow: View {
 
 /// Lists mounted external volumes for `mo clean --external`.
 struct ExternalVolumeSheet: View {
-    let model: CleanModel
+    @Bindable var model: CleanModel
     let cli: CLIInfo
     let isPreview: Bool
     @Environment(\.dismiss) private var dismiss
@@ -390,7 +390,7 @@ struct ExternalVolumeSheet: View {
         .padding(Theme.Space.sheet)
         .frame(width: 440)
         .onAppear { volumes = Self.mountedVolumes() }
-        .alert(confirmationTitle, isPresented: isConfirming) {
+        .alert(confirmationTitle, isPresented: $model.isConfirmingExternalClean) {
             // Return mustn't be the way something permanent happens.
             Button("Cancel", role: .cancel) {}
                 .keyboardShortcut(.defaultAction)
@@ -403,13 +403,6 @@ struct ExternalVolumeSheet: View {
     private var confirmationTitle: String {
         let name = model.volumeAwaitingConfirmation.map { $0.lastPathComponent } ?? "This Volume"
         return "Clean Metadata from \(name)?"
-    }
-
-    private var isConfirming: Binding<Bool> {
-        Binding(
-            get: { model.volumeAwaitingConfirmation != nil },
-            set: { if !$0 { model.volumeAwaitingConfirmation = nil } }
-        )
     }
 
     private func submit() {

@@ -29,7 +29,11 @@ struct ExternalVolumeConfirmationTests {
     @Test func decliningStartsNothing() {
         let clean = model()
         clean.requestExternalClean(path: "/Volumes/Disk", cli: fixtureCLI, preview: false)
-        clean.volumeAwaitingConfirmation = nil
+        #expect(clean.isConfirmingExternalClean)
+        clean.isConfirmingExternalClean = false
+        #expect(clean.volumeAwaitingConfirmation == nil)
+        clean.isConfirmingExternalClean = true
+        #expect(clean.volumeAwaitingConfirmation == nil)
         clean.confirmExternalClean(cli: fixtureCLI)
         #expect(clean.state == .idle)
         #expect(clean.run.phase == .idle)

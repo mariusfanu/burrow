@@ -24,6 +24,13 @@ final class CleanModel {
     /// The volume waiting on the confirmation that a real cleanup requires.
     var volumeAwaitingConfirmation: String?
 
+    /// Whether the external-volume question is on screen. Dismissing it forgets the volume.
+    var isConfirmingExternalClean: Bool {
+        get { volumeAwaitingConfirmation != nil }
+        set { if !newValue { volumeAwaitingConfirmation = nil } }
+    }
+
+
     let run: RunController
     private var scanTask: Task<Void, Never>?
     private var activePreview: CleanPreviewStream?

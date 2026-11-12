@@ -37,7 +37,7 @@ final class OptimizeModel {
         state = .previewing
         activity = "Checking this Mac…"
         errorMessage = nil
-        let buffer = OutputBuffer()
+        let buffer = LineOutputBuffer()
         let note: @MainActor @Sendable (String) -> Void = { [weak self] line in
             guard let self, self.previewID == id else { return }
             self.noteProgress(line)

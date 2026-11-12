@@ -2,7 +2,7 @@ import BurrowCore
 import Foundation
 
 /// Collects piped output from a background queue and tracks the latest full line.
-final class OutputBuffer: @unchecked Sendable {
+final class LineOutputBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var assembler = LineAssembler()
     private var lines: [String] = []

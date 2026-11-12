@@ -185,9 +185,7 @@ private struct AppRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Space.cluster) {
-            Toggle("Select \(app.name)", isOn: Binding(get: { isSelected }, set: { _ in toggle() }))
-                .labelsHidden()
-                .toggleStyle(.checkbox)
+            SelectionCheckbox(title: app.name, isSelected: isSelected, toggle: toggle)
             AppIconView(path: app.path)
                 .scaleEffect(isHovered && !Motion.isReduced ? 1.06 : 1)
             VStack(alignment: .leading, spacing: Theme.Space.micro) {

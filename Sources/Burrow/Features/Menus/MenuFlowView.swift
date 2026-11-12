@@ -157,9 +157,7 @@ private struct MenuItemRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Space.cluster) {
-            Toggle("Select \(item.name)", isOn: Binding(get: { isSelected }, set: { _ in toggle() }))
-                .labelsHidden()
-                .toggleStyle(.checkbox)
+            SelectionCheckbox(title: item.name, isSelected: isSelected, toggle: toggle)
             VStack(alignment: .leading, spacing: Theme.Space.micro) {
                 Text(item.path?.abbreviatingHome ?? item.name)
                     .font(.body)

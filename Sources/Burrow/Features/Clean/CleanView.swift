@@ -389,7 +389,7 @@ struct ExternalVolumeSheet: View {
         }
         .padding(Theme.Space.sheet)
         .frame(width: 440)
-        .onAppear { volumes = Self.mountedVolumes() }
+        .onAppear { volumes = ExternalVolumes.mounted() }
         .alert(confirmationTitle, isPresented: $model.isConfirmingExternalClean) {
             // Return mustn't be the way something permanent happens.
             Button("Cancel", role: .cancel) {}
@@ -408,19 +408,5 @@ struct ExternalVolumeSheet: View {
     private func submit() {
         guard let selection else { return }
         model.requestExternalClean(path: selection, cli: cli, preview: isPreview)
-    }
-
-    private static func mountedVolumes() -> [String] {
-        let keys: [URLResourceKey] = [.volumeIsInternalKey, .volumeIsReadOnlyKey]
-        let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
-        return urls.compactMap { url in
-            let values = try? url.resourceValues(forKeys: Set(keys))
-            guard url.path.hasPrefix("/Volumes/"),
-                  values?.volumeIsInternal != true,
-                  values?.volumeIsReadOnly != true else {
-                return nil
-            }
-            return url.path
-        }
     }
 }

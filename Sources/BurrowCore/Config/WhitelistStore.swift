@@ -8,12 +8,15 @@ import Foundation
 public struct WhitelistStore: Sendable {
     private let fileURL: URL
     private let home: String
-    private let defaults: [String]
+    private let cliRoot: String?
+
+    /// Read from the installed CLI on demand: only a missing whitelist file needs them.
+    private var defaults: [String] { Self.readDefaults(cliRoot: cliRoot, home: home) }
 
     public init(home: String = NSHomeDirectory(), cliRoot: String?) {
         self.home = home
+        self.cliRoot = cliRoot
         fileURL = URL(fileURLWithPath: home + "/.config/mole/whitelist")
-        defaults = Self.readDefaults(cliRoot: cliRoot, home: home)
     }
 
     public var usesDefaults: Bool {

@@ -30,13 +30,25 @@ struct ExternalVolumeConfirmationTests {
         let clean = model()
         clean.requestExternalClean(path: "/Volumes/Disk", cli: fixtureCLI, preview: false)
         #expect(clean.isConfirmingExternalClean)
+        // Flipping the alert binding to false (as SwiftUI does before running a button action)
+        // must not drop the pending volume before confirmExternalClean/cancelExternalClean runs.
         clean.isConfirmingExternalClean = false
-        #expect(clean.volumeAwaitingConfirmation == nil)
-        clean.isConfirmingExternalClean = true
+        #expect(clean.volumeAwaitingConfirmation == "/Volumes/Disk")
+        clean.cancelExternalClean()
         #expect(clean.volumeAwaitingConfirmation == nil)
         clean.confirmExternalClean(cli: fixtureCLI)
         #expect(clean.state == .idle)
         #expect(clean.run.phase == .idle)
+    }
+
+    @Test func alertDismissalBeforeConfirmStillStartsExternalClean() {
+        let clean = model()
+        clean.requestExternalClean(path: "/Volumes/Disk", cli: fixtureCLI, preview: false)
+        clean.isConfirmingExternalClean = false
+        clean.confirmExternalClean(cli: fixtureCLI)
+        #expect(clean.state == .running)
+        #expect(clean.volumeAwaitingConfirmation == nil)
+        clean.finishRun()
     }
 
     @Test func aPreviewNeedsNoConfirmationAndStaysADryRun() {
@@ -82,14 +94,14 @@ struct UninstallPlanGuardTests {
         model.selection = ["/Applications/Xcode-beta.app"]
         model.beginRemoval(cli: cli, preview: false)
         if alternatePrompt {
-            try await eventually { model.run.promptRequest != nil || model.state == .idle }
+            try await eventually { model.run.promptRequest != nil || model.state == .list }
             if model.run.promptRequest != nil { model.run.answerYesNo(true) }
         } else {
             try await eventually { model.run.terminal?.partial.contains("Enter confirm") == true }
             model.run.send("\r")
         }
-        try await eventually { model.state == .idle || !model.run.isRunning }
-        #expect(model.state == .idle)
+        try await eventually { model.state == .list && !model.run.isRunning }
+        #expect(model.state == .list)
         #expect(!FileManager.default.fileExists(atPath: directory + "/removed"))
     }
 
@@ -135,22 +147,18 @@ struct UninstallPlanGuardTests {
         #expect(model.run.isIrreversible)
         #expect(model.run.consequence?.contains("can’t be restored") == true)
         #expect(model.run.consequence?.contains("Personal data") == true)
-        try await eventually { model.state == .idle }
+        try await eventually { model.state == .list }
         let arguments = try String(contentsOfFile: directory + "/args", encoding: .utf8)
         #expect(arguments.contains("--permanent"))
 
         #expect(!model.deletePermanently)
         #expect(!model.includePersonalData)
         #expect(model.activeOptionsNotice == nil)
-        model.load(cli: cli)
-        try await eventually { await commands.runs.count == 2 }
-        await commands.completeRun(1, stdout: listJSON)
-        try await eventually { model.state == .list }
         model.selection = ["/Applications/Xcode-beta.app"]
         model.beginRemoval(cli: cli, preview: false)
         #expect(!model.run.isIrreversible)
         #expect(model.run.consequence?.contains("to the Trash") == true)
-        try await eventually { model.state == .idle }
+        try await eventually { model.state == .list }
         let next = try String(contentsOfFile: directory + "/args", encoding: .utf8)
         #expect(!next.contains("--permanent"))
         #expect(!next.contains("--with-data"))
@@ -161,10 +169,24 @@ struct UninstallPlanGuardTests {
         let model = try await loaded(cli: cli)
         model.selection = ["/Applications/Xcode-beta.app"]
         model.beginRemoval(cli: cli, preview: false)
-        try await eventually { model.state == .idle }
+        try await eventually { model.state == .list }
         #expect(model.run.promptRequest == nil)
         #expect(model.errorMessage?.contains("nothing was removed") == true)
         try await Task.sleep(for: .milliseconds(400))
         #expect(!FileManager.default.fileExists(atPath: directory + "/removed"))
+    }
+
+    @Test func planMatchesFailurePreservesLoadedListSearchAndSizes() async throws {
+        let (cli, _) = try fakeCLI(planning: "/Applications/Xcode.app")
+        let model = try await loaded(cli: cli)
+        model.searchText = "Xcode"
+        model.selection = ["/Applications/Xcode-beta.app"]
+        model.beginRemoval(cli: cli, preview: false)
+        try await eventually { model.state == .list }
+        #expect(model.apps.count == 2)
+        #expect(model.searchText == "Xcode")
+        #expect(model.sizes["/Applications/Xcode.app"] == 1)
+        #expect(model.sizes["/Applications/Xcode-beta.app"] == 1)
+        #expect(model.errorMessage?.contains("nothing was removed") == true)
     }
 }

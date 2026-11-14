@@ -1,5 +1,6 @@
 import BurrowCore
 import Foundation
+import Synchronization
 
 /// All decoding and parsing stays on one background queue. Only the newest coalesced
 /// report waits for the main actor, regardless of how quickly the CLI prints.
@@ -10,12 +11,11 @@ final class CleanPreviewStream: @unchecked Sendable {
     private var parser = CleanReportParser()
     private var scheduled = false
     private var isFinished = false
-    private let cancellationLock = NSLock()
-    private var cancelled = false
+    private let cancelled = Mutex(false)
     private let pathListURL: URL
     private let originalList: FileStamp?
 
-    private var isCancelled: Bool { cancellationLock.withLock { cancelled } }
+    private var isCancelled: Bool { cancelled.withLock { $0 } }
 
     init(pathListURL: URL) {
         self.pathListURL = pathListURL
@@ -80,7 +80,7 @@ final class CleanPreviewStream: @unchecked Sendable {
     }
 
     func cancel() {
-        cancellationLock.withLock { cancelled = true }
+        cancelled.withLock { $0 = true }
         continuation.finish()
     }
 }

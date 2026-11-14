@@ -4,6 +4,21 @@ import SwiftUI
 struct StatusDashboard: View {
     let store: StatusStore
     let snapshot: StatusSnapshot
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var columnCount = 3
+
+    /// Returns the responsive grid column count for the available container width.
+    nonisolated static func columns(forWidth width: CGFloat) -> Int {
+        switch width {
+        case 700...: 3
+        case 460..<700: 2
+        default: 1
+        }
+    }
+
+    private var columns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: Theme.Space.cluster, alignment: .top), count: columnCount)
+    }
 
     var body: some View {
         ScrollView {
@@ -13,22 +28,23 @@ struct StatusDashboard: View {
                 if let message = store.errorMessage {
                     InlineNotice(text: message)
                 }
-                Grid(horizontalSpacing: Theme.Space.cluster, verticalSpacing: Theme.Space.cluster) {
-                    GridRow {
-                        CPUCard(snapshot: snapshot, store: store).arrives(index: 1)
-                        MemoryCard(snapshot: snapshot, store: store).arrives(index: 2)
-                        NetworkCard(snapshot: snapshot, store: store).arrives(index: 3)
-                    }
-                    GridRow {
-                        DiskCard(snapshot: snapshot).arrives(index: 4)
-                        GPUCard(snapshot: snapshot).arrives(index: 5)
-                        PowerCard(snapshot: snapshot).arrives(index: 6)
-                    }
+                LazyVGrid(columns: columns, spacing: Theme.Space.cluster) {
+                    CPUCard(snapshot: snapshot, store: store).arrives(index: 1)
+                    MemoryCard(snapshot: snapshot, store: store).arrives(index: 2)
+                    NetworkCard(snapshot: snapshot, store: store).arrives(index: 3)
+                    DiskCard(snapshot: snapshot).arrives(index: 4)
+                    GPUCard(snapshot: snapshot).arrives(index: 5)
+                    PowerCard(snapshot: snapshot).arrives(index: 6)
+                }
+                .onGeometryChange(for: Int.self) { proxy in
+                    Self.columns(forWidth: proxy.size.width)
+                } action: { count in
+                    withAnimation(Motion.glide(reduced: reduceMotion)) { columnCount = count }
                 }
                 if let bluetooth = snapshot.bluetooth, bluetooth.contains(where: { $0.connected == true }) {
                     BluetoothCard(devices: bluetooth)
                         .arrives(index: 7)
-                        .transition(Motion.rise)
+                        .transition(Motion.rise(reduced: reduceMotion))
                 }
                 ProcessCard(snapshot: snapshot).arrives(index: 8)
             }

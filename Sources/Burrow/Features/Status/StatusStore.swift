@@ -40,6 +40,11 @@ final class StatusStore {
         self.freshnessClock = freshnessClock
     }
 
+    isolated deinit {
+        task?.cancel()
+        freshnessTask?.cancel()
+    }
+
     /// Restarts when the interval or CLI changes, or the previous stream has finished.
     func start(cli: CLIInfo, interval: Int) {
         guard task == nil || interval != currentInterval || cli != currentCLI else { return }

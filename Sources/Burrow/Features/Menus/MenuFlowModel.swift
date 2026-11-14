@@ -128,8 +128,10 @@ final class MenuFlowModel {
             } catch is CancellationError {
                 return
             } catch {
+                guard !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
                 run.cancel()
+                self.driver = nil
                 state = .idle
             }
         }
@@ -183,6 +185,7 @@ final class MenuFlowModel {
             } catch is CancellationError {
                 return
             } catch {
+                guard !Task.isCancelled else { return }
                 abandon(because: error.localizedDescription)
             }
         }

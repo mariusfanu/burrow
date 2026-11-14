@@ -30,11 +30,15 @@ final class UninstallModel {
     private(set) var apps: [InstalledApp] = []
     private(set) var sizes: [String: Int64] = [:]
     private(set) var sizeStates: [String: SizeState] = [:]
+    private(set) var largestSize: Int64 = 0
     private(set) var isMeasuring = false
     private(set) var hasPendingSizeSort = false
     private var orderedApps: [InstalledApp] = []
     var selection: Set<String> = [] {
-        didSet { noteInteraction() }
+        didSet {
+            noteInteraction()
+            errorMessage = nil
+        }
     }
     var searchText = "" {
         didSet { noteInteraction() }
@@ -83,6 +87,11 @@ final class UninstallModel {
         self.commands = commands
         self.sizeClient = sizeClient
         self.home = home
+    }
+
+    isolated deinit {
+        loadTask?.cancel()
+        sizeTask?.cancel()
     }
 
     var visibleApps: [InstalledApp] {
@@ -146,7 +155,9 @@ final class UninstallModel {
     var selectionSummary: String {
         guard state == .list else { return "" }
         if selection.isEmpty { return "\(apps.count) apps" }
-        return "\(selection.count) selected · \(selectedBytes.fileSize)"
+        let measured = selectedApps.compactMap { sizes[$0.id] }
+        guard !measured.isEmpty else { return "\(selection.count) selected" }
+        return "\(selection.count) selected · \(measured.saturatingSum.fileSize)"
     }
 
     /// Another page changed what's installed, so the list needs reading again.
@@ -172,7 +183,8 @@ final class UninstallModel {
         stopMeasurements()
         state = .loading
         errorMessage = nil
-        loadTask = Task {
+        loadTask = Task { [weak self] in
+            guard let self else { return }
             defer { if loadID == id { loadTask = nil } }
             do {
                 let result = try await commands.run(cli.executable, ["uninstall", "--list"], 120)
@@ -185,6 +197,7 @@ final class UninstallModel {
                     apps = list
                     sizes = [:]
                     sizeStates = [:]
+                    largestSize = 0
                     // A Reload keeps familiar positions until fresh measurements finish.
                     orderedApps = apps.sorted {
                         let first = previousOrder[$0.id] ?? Int.max
@@ -225,7 +238,8 @@ final class UninstallModel {
         }
         isMeasuring = true
         let sizeClient = sizeClient
-        sizeTask = Task {
+        sizeTask = Task { [weak self] in
+            guard let self else { return }
             defer {
                 if measurementID == id {
                     sizeTask = nil
@@ -239,11 +253,24 @@ final class UninstallModel {
                     next += 1
                     group.addTask { await Self.measure(appID, at: path, using: sizeClient) }
                 }
+                var pendingUpdates: [(String, SizeState)] = []
+                let flushTask = Task {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .milliseconds(100))
+                        guard !Task.isCancelled, measurementID == id else { return }
+                        if !pendingUpdates.isEmpty {
+                            applySizeUpdates(pendingUpdates)
+                            pendingUpdates.removeAll(keepingCapacity: true)
+                        }
+                    }
+                }
+                defer { flushTask.cancel() }
                 while let (appID, measurement) = await group.next() {
                     guard measurementID == id, !Task.isCancelled else { continue }
-                    sizeStates[appID] = measurement
-                    if case .measured(let bytes) = measurement {
-                        sizes[appID] = bytes
+                    pendingUpdates.append((appID, measurement))
+                    if pendingUpdates.count >= 4 {
+                        applySizeUpdates(pendingUpdates)
+                        pendingUpdates.removeAll(keepingCapacity: true)
                     }
                     if next < pending.count {
                         let (appID, path) = pending[next]
@@ -251,12 +278,25 @@ final class UninstallModel {
                         group.addTask { await Self.measure(appID, at: path, using: sizeClient) }
                     }
                 }
+                if !pendingUpdates.isEmpty, measurementID == id, !Task.isCancelled {
+                    applySizeUpdates(pendingUpdates)
+                }
             }
             guard measurementID == id, !Task.isCancelled else { return }
             if !measurementWasInteractedWith {
                 orderedApps = sortedApps()
             } else if sortOrder == .size {
                 hasPendingSizeSort = orderedApps.map(\.id) != sortedApps().map(\.id)
+            }
+        }
+    }
+
+    private func applySizeUpdates(_ updates: [(String, SizeState)]) {
+        for (appID, measurement) in updates {
+            sizeStates[appID] = measurement
+            if case .measured(let bytes) = measurement {
+                sizes[appID] = bytes
+                if bytes > largestSize { largestSize = bytes }
             }
         }
     }
@@ -367,7 +407,7 @@ final class UninstallModel {
             + "Run mo uninstall in Terminal to choose from its own list."
         // These widen what a removal does, so a stopped attempt mustn't pass them on.
         clearRemovalOptions()
-        state = .idle
+        state = .list
         return false
     }
 

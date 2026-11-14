@@ -48,4 +48,44 @@ struct HistoryModelTests {
         #expect(model.report?.limit == 3)
         #expect(model.errorMessage != nil)
     }
+
+    @Test func cancelLoadingStopsInFlightLoadAndIgnoresLateCompletion() async throws {
+        let commands = ScriptedCommands()
+        let model = HistoryModel(commands: commands.client)
+        model.load(cli: fixtureCLI)
+        try await eventually { await commands.runs.count == 1 }
+        #expect(model.isLoading)
+
+        model.cancelLoading()
+        #expect(!model.isLoading)
+
+        await commands.completeRun(0, stdout: "{\"limit\":99}")
+        for _ in 0..<20 { await Task.yield() }
+        #expect(model.report == nil)
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test func invalidateCLIResultsClearsReportErrorAndInFlightLoad() async throws {
+        let commands = ScriptedCommands()
+        let model = HistoryModel(commands: commands.client)
+        model.load(cli: fixtureCLI)
+        try await eventually { await commands.runs.count == 1 }
+        await commands.completeRun(0, stdout: "{\"limit\":5}")
+        try await eventually { !model.isLoading }
+        #expect(model.report?.limit == 5)
+
+        model.errorMessage = "Stale error"
+        model.load(cli: fixtureCLI)
+        try await eventually { await commands.runs.count == 2 }
+        #expect(model.isLoading)
+
+        model.invalidateCLIResults()
+        #expect(!model.isLoading)
+        #expect(model.report == nil)
+        #expect(model.errorMessage == nil)
+
+        await commands.completeRun(1, stdout: "{\"limit\":12}")
+        for _ in 0..<20 { await Task.yield() }
+        #expect(model.report == nil)
+    }
 }

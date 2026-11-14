@@ -6,12 +6,16 @@ struct OptimizePlan: View {
     let lines: [LogLine]
 
     private var groups: [PlanGroup] {
+        Self.groups(from: lines)
+    }
+
+    static func groups(from lines: [LogLine]) -> [PlanGroup] {
         var result: [PlanGroup] = []
-        var current = PlanGroup(title: nil, lines: [])
+        var current = PlanGroup(id: 0, title: nil, lines: [])
         for line in lines {
             if line.kind == .section {
                 if !current.lines.isEmpty { result.append(current) }
-                current = PlanGroup(title: line.title, lines: [])
+                current = PlanGroup(id: result.count, title: line.title, lines: [])
             } else {
                 current.lines.append(line)
             }
@@ -31,6 +35,7 @@ struct OptimizePlan: View {
                             if let title = group.title {
                                 Text(title)
                                     .font(.headline)
+                                    .accessibilityAddTraits(.isHeader)
                             }
                             ForEach(group.lines) { LogRow(line: $0) }
                         }
@@ -42,9 +47,9 @@ struct OptimizePlan: View {
         }
     }
 
-    private struct PlanGroup: Identifiable {
+    struct PlanGroup: Identifiable {
+        let id: Int
         let title: String?
         var lines: [LogLine]
-        var id: String { title ?? "summary" }
     }
 }

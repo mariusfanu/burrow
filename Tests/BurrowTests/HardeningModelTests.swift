@@ -112,6 +112,55 @@ struct MenuFlowModelTests {
         #expect(MenuFlowConfiguration.installers.isIrreversible)
         #expect(!MenuFlowConfiguration.slim.isIrreversible)
     }
+
+    @Test func slimPreviewSkipsMenuAndRunsDirectly() async throws {
+        let (cli, _) = try makeScript(#"""
+        #!/bin/zsh
+        echo "preview-slim-ran"
+        """#)
+        let model = MenuFlowModel(configuration: .slim, policy: .live)
+        model.scan(cli: cli, preview: true)
+        #expect(model.state == .running)
+        try await eventually { !model.run.isRunning }
+        #expect(model.run.lines.contains { $0.text.contains("preview-slim-ran") })
+        model.finishRun()
+    }
+
+    @Test func scanErrorClearsStateAndAllowsFreshScan() async throws {
+        let (failingCLI, _) = try makeScript(#"""
+        #!/bin/bash
+        printf '\033[H\033[2J'
+        printf 'Select Things [1/1], 5 selected\r\n\r\n'
+        printf '➤ ○ row0   1.0MB\r\n'
+        printf '\r\n↑↓ | Space Select | Enter Confirm | Q Quit\r\n'
+        sleep 5
+        """#)
+        let model = MenuFlowModel(configuration: .installers, policy: .live)
+        model.scan(cli: failingCLI, preview: false)
+        try await eventually { model.state == .idle && model.errorMessage != nil }
+        #expect(model.items.isEmpty)
+
+        // Ensure no stale driver interferes with a subsequent scan.
+        let (okCLI, _) = try menuCLI()
+        model.scan(cli: okCLI, preview: false)
+        try await eventually { model.state == .choosing }
+        #expect(model.items.count == 3)
+        model.abandonSelection()
+    }
+
+    @Test func togglingPreviewDuringChoosingAbandonsSelectionImmediately() async throws {
+        let (cli, directory) = try menuCLI()
+        let app = AppModel(defaults: nil, environment: [:], locator: { _ in cli })
+        app.installers.scan(cli: cli, preview: false)
+        try await eventually { app.installers.state == .choosing }
+
+        app.previewMode = true
+        #expect(app.installers.state == .idle)
+        #expect(app.installers.errorMessage == MenuFlowModel.previewChangedReason)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(!FileManager.default.fileExists(atPath: directory + "/result"))
+        await app.shutdown(lifecycle: ProcessLifecycle())
+    }
 }
 
 @MainActor
@@ -373,6 +422,13 @@ struct DeadlineTests {
         }
         #expect(!finished)
         #expect(start.duration(to: .now) < .seconds(5))
+    }
+
+    @Test func workThatFinishesEarlyReturnsPromptlyWithoutWaitingForDeadline() async {
+        let start = ContinuousClock.now
+        let finished = await finishes(within: .seconds(30)) {}
+        #expect(finished)
+        #expect(start.duration(to: .now) < .seconds(2))
     }
 }
 

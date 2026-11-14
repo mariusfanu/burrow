@@ -237,4 +237,58 @@ struct UninstallModelTests {
         try await eventually { !model.isMeasuring }
         #expect(model.sizes.count == 10)
     }
+
+    @Test func targetingErrorSetsErrorMessageAndClearsOnSelectionChange() async throws {
+        let (model, commands, sizes) = fixture()
+        model.load(cli: fixtureCLI)
+        try await eventually { await commands.runs.count == 1 }
+        // A leading-dash name has no safe positional term, so beginRemoval sets errorMessage.
+        await commands.completeRun(0, stdout: """
+        [{"name":"-Bad","uninstall_name":"-Bad"},
+         {"name":"Alpha","path":"/apps/alpha.app","uninstall_name":"Alpha"}]
+        """)
+        try await eventually { await sizes.requests.count == 1 }
+        await sizes.complete(path: "/apps/alpha.app", bytes: 42)
+        try await eventually { model.state == .list && !model.isMeasuring }
+
+        let badID = try #require(model.apps.first(where: { $0.name == "-Bad" })?.id)
+        model.selection = [badID]
+        model.beginRemoval(cli: fixtureCLI, preview: false)
+        #expect(model.state == .list)
+        #expect(model.errorMessage != nil)
+
+        model.selection = ["/apps/alpha.app"]
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test func selectionSummaryOmitsZeroKBWhenSelectedAppsAreUnmeasured() async throws {
+        let (model, commands, _) = fixture()
+        model.load(cli: fixtureCLI)
+        try await eventually { await commands.runs.count == 1 }
+        await commands.completeRun(0, stdout: list)
+        try await eventually { model.state == .list }
+
+        // While measurements are still pending, selecting apps must not report "Zero KB".
+        model.selection = ["/apps/alpha.app", "/apps/beta.app"]
+        #expect(model.selectionSummary == "2 selected")
+    }
+
+    @Test func largestSizeTracksMaximumAcrossMeasurementsAndResetsOnReload() async throws {
+        let (model, commands, sizes) = try await loadedFixture()
+        #expect(model.largestSize == 0)
+        await sizes.complete(path: "/apps/alpha.app", bytes: 120)
+        await sizes.complete(path: "/apps/beta.app", bytes: 450)
+        try await eventually { !model.isMeasuring }
+        #expect(model.largestSize == 450)
+
+        model.load(cli: fixtureCLI)
+        try await eventually { await commands.runs.count == 2 }
+        await commands.completeRun(1, stdout: list)
+        try await eventually { await sizes.requests.count == 4 }
+        #expect(model.largestSize == 0)
+        await sizes.complete(path: "/apps/alpha.app", occurrence: 1, bytes: 80)
+        await sizes.complete(path: "/apps/beta.app", occurrence: 1, bytes: 60)
+        try await eventually { !model.isMeasuring }
+        #expect(model.largestSize == 80)
+    }
 }

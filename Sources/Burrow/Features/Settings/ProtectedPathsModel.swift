@@ -17,6 +17,7 @@ final class ProtectedPathsModel {
         do {
             patterns = try store.load()
             isLoaded = true
+            errorMessage = nil
         } catch {
             isLoaded = false
             errorMessage = error.localizedDescription
@@ -53,6 +54,7 @@ final class ProtectedPathsModel {
         guard isLoaded, !isPreview else { return false }
         do {
             try store.remove(pattern)
+            errorMessage = nil
             load(from: store)
             return true
         } catch {

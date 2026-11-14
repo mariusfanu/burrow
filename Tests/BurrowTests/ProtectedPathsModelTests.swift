@@ -98,4 +98,30 @@ struct ProtectedPathsModelTests {
         #expect(model.patterns == [fixture.defaultPattern, similar])
         #expect(try fixture.store.load() == model.patterns)
     }
+
+    @Test func loadAndRemoveClearPreviousErrorOnSuccess() throws {
+        let fixture = try Fixture()
+        let keep = fixture.home + "/Keep"
+        let url = URL(fileURLWithPath: fixture.whitelist)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([0xFF]).write(to: url)
+
+        let model = ProtectedPathsModel()
+        model.load(from: fixture.store)
+        #expect(model.errorMessage != nil)
+        #expect(!model.isLoaded)
+
+        // Fixing the file and reloading clears the previous load error.
+        try FileManager.default.removeItem(at: url)
+        try fixture.store.save([fixture.defaultPattern, keep])
+        model.load(from: fixture.store)
+        #expect(model.isLoaded)
+        #expect(model.errorMessage == nil)
+
+        // A failed add sets errorMessage; a subsequent remove clears it on success.
+        #expect(!model.addTyped("../bad", to: fixture.store, home: fixture.home, isPreview: false))
+        #expect(model.errorMessage != nil)
+        #expect(model.remove(keep, from: fixture.store, isPreview: false))
+        #expect(model.errorMessage == nil)
+    }
 }

@@ -42,7 +42,7 @@ struct ExternalVolumeSheet: View {
         .onAppear { volumes = ExternalVolumes.mounted() }
         .alert(confirmationTitle, isPresented: $model.isConfirmingExternalClean) {
             // Return mustn't be the way something permanent happens.
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) { model.cancelExternalClean() }
                 .keyboardShortcut(.defaultAction)
             Button("Clean") { model.confirmExternalClean(cli: cli) }
         } message: {

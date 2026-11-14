@@ -216,6 +216,62 @@ struct AnalyzeModelTests {
         #expect(await restores.calls == ["/fixture/b"])
         #expect(!model.isTrashing)
     }
+
+    @Test func nonTrashNoticesDoNotExposeUndoEvenWhenLastTrashedExists() async throws {
+        let json = """
+        {
+          "path": "/fixture",
+          "entries": [
+            { "name": "Scratch", "path": "/fixture/Scratch", "size": 100, "is_dir": false },
+            { "name": "Protected", "path": "/fixture/Protected", "size": 200, "is_dir": true }
+          ]
+        }
+        """
+        let model = AnalyzeModel(
+            policy: .live,
+            commands: CommandClient(run: { _, _, _ in
+                CommandResult(status: 0, stdout: json, stderr: "")
+            }),
+            trashClient: TrashClient(trash: { entries, _ in
+                TrashMover.Report(
+                    outcomes: entries.map {
+                        .init(
+                            path: $0.path,
+                            status: .succeeded,
+                            trashedURL: URL(fileURLWithPath: "/tmp/trash-\($0.path.lastPathComponent)")
+                        )
+                    },
+                    logFailed: false
+                )
+            }),
+            home: "/fixture",
+            evaluateProtection: { entries, _ in
+                Set(entries.filter { $0.name == "Protected" }.map(\.path))
+            }
+        )
+        model.openRoot(cli: fixtureCLI)
+        try await eventually { !model.isLoading && model.entries.count == 2 }
+        let scratch = try #require(model.entries.first { $0.name == "Scratch" })
+        let protected = try #require(model.entries.first { $0.name == "Protected" })
+
+        model.selection = [scratch.path]
+        model.trashSelection(cli: fixtureCLI)
+        try await eventually { model.lastTrashed != nil && !model.isTrashing }
+        #expect(model.noticeShowsUndo)
+        #expect(model.noticeMessage?.contains("Moved") == true)
+
+        // Trigger a non-trash notice (selecting a protected item):
+        // lastTrashed remains populated for Edit > Undo, but the toast must not offer Undo.
+        model.selection = [protected.path]
+        model.trashSelection(cli: fixtureCLI)
+        #expect(model.lastTrashed != nil)
+        #expect(!model.noticeShowsUndo)
+        #expect(model.noticeMessage?.contains("Protected") == true)
+
+        model.dismissNotice()
+        #expect(model.noticeMessage == nil)
+        #expect(!model.noticeShowsUndo)
+    }
 }
 
 private actor SuspendedRestore {
@@ -436,14 +492,40 @@ struct HighRiskTrashTests {
         model.selection = [risky]
         model.trashSelection(cli: fixtureCLI)
         #expect(model.isConfirmingTrash)
+        // Flipping the alert binding to false (as SwiftUI does before running a button action)
+        // must not drop pendingTrash before confirmPendingTrash/cancelPendingTrash runs.
         model.isConfirmingTrash = false
-        #expect(model.pendingTrash == nil)
-        model.isConfirmingTrash = true
+        #expect(model.pendingTrash != nil)
+        model.cancelPendingTrash()
         #expect(model.pendingTrash == nil)
         model.confirmPendingTrash(cli: fixtureCLI)
         try await Task.sleep(for: .milliseconds(50))
         #expect(await recorded.moved.isEmpty)
         #expect(model.entries.count == 2)
+    }
+
+    @Test func alertDismissalBeforeConfirmStillMovesPendingTrash() async throws {
+        let (model, recorded) = try await fixture()
+        model.selection = [risky]
+        model.trashSelection(cli: fixtureCLI)
+        model.isConfirmingTrash = false
+        model.confirmPendingTrash(cli: fixtureCLI)
+        try await eventually { await recorded.moved == [risky] }
+        #expect(model.pendingTrash == nil)
+    }
+
+    @Test func canTrashPathsRejectsMissingAndBusyOrStaleStates() async throws {
+        let (model, _) = try await fixture()
+        #expect(model.canTrash(paths: [ordinary]))
+        #expect(!model.canTrash(paths: []))
+        #expect(!model.canTrash(paths: [ordinary, "/nonexistent/missing"]))
+
+        model.markStale()
+        #expect(!model.canTrash(paths: [ordinary]))
+
+        let (fresh, _) = try await fixture()
+        await fresh.shutdown()
+        #expect(!fresh.canTrash(paths: [ordinary]))
     }
 
     @Test func oneRiskyItemMakesTheWholeSelectionAskAndNamesOnlyThatItem() async throws {
@@ -475,5 +557,42 @@ struct HighRiskTrashTests {
         #expect(model.pendingTrash == nil)
         #expect(model.noticeMessage?.contains("Preview Mode") == true)
         #expect(await recorded.moved.isEmpty)
+    }
+
+    @Test func cacheStaysBoundedToMaximumCacheEntries() async throws {
+        let commands = ScriptedCommands()
+        let model = AnalyzeModel(
+            policy: .live,
+            commands: commands.client,
+            evaluateProtection: { _, _ in [] }
+        )
+        let total = AnalyzeModel.maximumCacheEntries + 6
+        for index in 0..<total {
+            let path = "/tmp/dir-\(index)"
+            model.openPath(path, cli: fixtureCLI)
+            try await eventually { await commands.runs.count == index + 1 }
+            let json = """
+            {"path":"\(path)","total_size":10,"entries":[]}
+            """
+            await commands.completeRun(index, stdout: json)
+            try await eventually { !model.isLoading }
+        }
+        #expect(model.cachedEntryCount == AnalyzeModel.maximumCacheEntries)
+    }
+
+    @Test func openPathRejectsRelativeAndNulContainingPaths() async throws {
+        let commands = ScriptedCommands()
+        let model = AnalyzeModel(
+            policy: .live,
+            commands: commands.client,
+            evaluateProtection: { _, _ in [] }
+        )
+        model.openPath("relative/path", cli: fixtureCLI)
+        model.openPath("-flag", cli: fixtureCLI)
+        model.openPath("/tmp/bad\0path", cli: fixtureCLI)
+        for _ in 0..<10 { await Task.yield() }
+        #expect(await commands.runs.isEmpty)
+        #expect(model.levels.isEmpty)
+        #expect(!model.isLoading)
     }
 }

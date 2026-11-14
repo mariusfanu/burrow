@@ -3,6 +3,7 @@ import Foundation
 import Testing
 @testable import Burrow
 
+@MainActor
 struct HistoryPresentationTests {
     private func session(_ json: String) throws -> HistoryReport.Session {
         let report = try HistoryReport.decode(Data(#"{"sessions":[\#(json)]}"#.utf8))

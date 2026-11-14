@@ -1,6 +1,7 @@
 import Testing
 @testable import Burrow
 
+@MainActor
 struct InteractionStateTests {
     @Test func aRealizedRowStaysVisibleWhenSortingMovesItIntoTheEntranceWave() {
         var arrival = ArrivalState()

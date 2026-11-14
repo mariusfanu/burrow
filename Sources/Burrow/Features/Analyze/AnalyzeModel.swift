@@ -16,10 +16,11 @@ final class AnalyzeModel {
     /// The question waiting on an answer before a high-risk selection moves.
     var pendingTrash: TrashConfirmation?
 
-    /// Whether the high-risk question is on screen. Dismissing it drops the question.
+    /// Whether the high-risk question is on screen. Cancel and Confirm clear `pendingTrash`
+    /// explicitly so SwiftUI dismissing the alert before running the button action cannot no-op.
     var isConfirmingTrash: Bool {
         get { pendingTrash != nil }
-        set { if !newValue { pendingTrash = nil } }
+        set {}
     }
 
     private(set) var isLoading = false
@@ -39,10 +40,31 @@ final class AnalyzeModel {
     var onFilesMoved: (@MainActor () -> Void)?
     var errorMessage: String?
     var noticeMessage: String?
+    private(set) var noticeShowsUndo = false
     /// The window's undo manager, so that Edit > Undo can put trashed items back.
     weak var undoManager: UndoManager?
 
     private var cache: [String: AnalyzePresentation] = [:]
+    private var cacheOrder: [String] = []
+    static let maximumCacheEntries = 24
+    var cachedEntryCount: Int { cache.count }
+
+    /// Stores a presentation snapshot in the bounded LRU cache, evicting the oldest entry if full.
+    private func storeInCache(_ value: AnalyzePresentation, for key: String) {
+        cache[key] = value
+        cacheOrder.removeAll { $0 == key }
+        cacheOrder.append(key)
+        while cacheOrder.count > Self.maximumCacheEntries {
+            let evicted = cacheOrder.removeFirst()
+            cache.removeValue(forKey: evicted)
+        }
+    }
+
+    /// Removes all cached directory presentations and resets LRU eviction order.
+    private func clearCache() {
+        cache.removeAll()
+        cacheOrder.removeAll()
+    }
     private var task: Task<Void, Never>?
     private var loadID = UUID()
     private let policy: ExecutionPolicy
@@ -98,7 +120,7 @@ final class AnalyzeModel {
     func markStale() {
         cancelScan()
         isStale = true
-        cache.removeAll()
+        clearCache()
         pendingTrash = nil
     }
 
@@ -106,16 +128,16 @@ final class AnalyzeModel {
         cancelScan()
         resetInteraction()
         levels = []
-        cache.removeAll()
+        clearCache()
         presentation = nil
-        noticeMessage = nil
+        showNotice(nil)
     }
 
     /// A list selection can land on a protected row, and then there's no Move to Trash to
     /// offer, so this says why.
     func noteSelection(added: Set<String>) {
         guard let entry = entries.first(where: { added.contains($0.path) && !canTrash($0) }) else { return }
-        noticeMessage = "\(entry.name) is protected, so it stays view-only."
+        showNotice("\(entry.name) is protected, so it stays view-only.")
     }
 
     /// Opens a folder, growing from the tile it was opened from.
@@ -125,7 +147,7 @@ final class AnalyzeModel {
 
     /// Opens a folder by path. Without a tile, there's nothing to grow from.
     func openPath(_ path: String, tint: UInt32? = nil, rect: CGRect? = nil, cli: CLIInfo) {
-        guard !isTrashing, !isShuttingDown else { return }
+        guard !isTrashing, !isShuttingDown, path.hasPrefix("/"), !path.utf8.contains(0) else { return }
         if revisit(path, cli: cli) { return }
         isZoomingIn = true
         zoomRect = rect
@@ -176,7 +198,7 @@ final class AnalyzeModel {
         task?.cancel()
         task = nil
         isLoading = false
-        if result == nil { noticeMessage = "Scan cancelled. Choose a folder or rescan to continue." }
+        if result == nil { showNotice("Scan cancelled. Choose a folder or rescan to continue.") }
     }
 
     func shutdown() async {
@@ -185,9 +207,15 @@ final class AnalyzeModel {
         await mutationTask?.value
     }
 
+    /// Returns `true` when every path in `paths` resolves to a trashable entry and no mutation or load is active.
+    func canTrash(paths: Set<String>) -> Bool {
+        guard !isStale, !isLoading, !isTrashing, !isShuttingDown, !paths.isEmpty else { return false }
+        let matching = entries.filter { paths.contains($0.path) }
+        return matching.count == paths.count && matching.allSatisfy(canTrash)
+    }
+
     var canTrashSelection: Bool {
-        !isStale && !isLoading && !isTrashing && !isShuttingDown && !selection.isEmpty
-            && selectedEntries.count == selection.count && selectedEntries.allSatisfy(canTrash)
+        canTrash(paths: selection)
     }
 
     func refresh(cli: CLIInfo) {
@@ -216,11 +244,12 @@ final class AnalyzeModel {
         task?.cancel()
         if clearError {
             errorMessage = nil
-            noticeMessage = nil
+            showNotice(nil)
         }
         let path = current?.path
         let key = current?.id ?? "/"
         if !refresh, let cached = cache[key] {
+            storeInCache(cached, for: key)
             presentation = cached
             isLoading = false
             return
@@ -231,7 +260,10 @@ final class AnalyzeModel {
             defer { if loadID == id { task = nil } }
             do {
                 var arguments = ["analyze", "--json"]
-                if let path { arguments.append(path) }
+                if let path {
+                    guard path.hasPrefix("/"), !path.utf8.contains(0) else { return }
+                    arguments.append(path)
+                }
                 let output = try await commands.run(cli.executable, arguments, 600)
                 try Task.checkCancellation()
                 guard loadID == id else { return }
@@ -255,7 +287,7 @@ final class AnalyzeModel {
                 }
                 try Task.checkCancellation()
                 guard loadID == id else { return }
-                cache[key] = prepared
+                storeInCache(prepared, for: key)
                 isStale = false
                 withAnimation(Motion.lift) { presentation = prepared }
                 isLoading = false
@@ -277,7 +309,7 @@ final class AnalyzeModel {
     /// Selects a tile the way Finder selects a file. Protected items stay view-only.
     func click(_ entry: AnalyzeResult.Entry, extending: Bool) {
         guard canTrash(entry) else {
-            noticeMessage = "\(entry.name) is protected, so it stays view-only."
+            showNotice("\(entry.name) is protected, so it stays view-only.")
             return
         }
         withAnimation(Motion.snap) {
@@ -305,17 +337,17 @@ final class AnalyzeModel {
     func trashSelection(cli: CLIInfo) {
         guard !isTrashing, !isShuttingDown else { return }
         guard !isStale else {
-            noticeMessage = "Rescan this folder to review its current contents."
+            showNotice("Rescan this folder to review its current contents.")
             return
         }
         guard canTrashSelection else {
-            noticeMessage = "Protected items stay view-only. Select other items to move to the Trash."
+            showNotice("Protected items stay view-only. Select other items to move to the Trash.")
             return
         }
         let chosen = selectedEntries.map { (path: $0.path, size: $0.size) }
         if policy.effectivePreview {
             let count = chosen.count
-            noticeMessage = "Preview Mode: nothing moved. This would move \(String(count.itemCount.characters)) (\(selectedBytes.fileSize)) to the Trash."
+            showNotice("Preview Mode: nothing moved. This would move \(String(count.itemCount.characters)) (\(selectedBytes.fileSize)) to the Trash.")
             withAnimation(Motion.snap) { selection = [] }
             return
         }
@@ -334,10 +366,14 @@ final class AnalyzeModel {
         moveToTrash(selectedEntries.map { (path: $0.path, size: $0.size) }, cli: cli)
     }
 
+    func cancelPendingTrash() {
+        pendingTrash = nil
+    }
+
     private func moveToTrash(_ chosen: [(path: String, size: Int64)], cli: CLIInfo) {
         enqueueMutation { [self] in
             guard !policy.effectivePreview else {
-                noticeMessage = "Preview Mode: nothing moved. Turn off Preview Mode to move these items to the Trash."
+                showNotice("Preview Mode: nothing moved. Turn off Preview Mode to move these items to the Trash.")
                 return
             }
             let report = await self.trashClient.trash(chosen, self.home)
@@ -353,17 +389,17 @@ final class AnalyzeModel {
             }
             if !moved.isEmpty {
                 onFilesMoved?()
-                noticeMessage = "Moved \(String(moved.count.itemCount.characters)) to the Trash."
+                showNotice("Moved \(String(moved.count.itemCount.characters)) to the Trash.", allowsUndo: true)
             } else if !removed.isEmpty {
-                noticeMessage = "The selected items that disappeared were already missing."
+                showNotice("The selected items that disappeared were already missing.")
             }
             // The rest of the map closes over the gap, because the tiles keep their identity.
             withAnimation(Motion.lift) {
                 presentation = presentation?.removing(Set(removed.map(\.path)))
                 selection = []
             }
-            cache.removeAll()
-            if !isStale, let presentation { cache[current?.id ?? "/"] = presentation }
+            clearCache()
+            if !isStale, let presentation { storeInCache(presentation, for: current?.id ?? "/") }
         }
     }
 
@@ -392,7 +428,7 @@ final class AnalyzeModel {
     private func restore(_ batch: TrashedBatch, cli: CLIInfo) {
         guard !isShuttingDown, undoActions[batch.id] != nil else { return }
         if policy.effectivePreview {
-            noticeMessage = "Preview Mode: nothing restored. Turn off Preview Mode to put these items back."
+            showNotice("Preview Mode: nothing restored. Turn off Preview Mode to put these items back.")
             if undoManager?.isUndoing == true {
                 // Re-register after Undo finishes, otherwise UndoManager would make this a Redo.
                 Task { [weak self] in
@@ -410,7 +446,7 @@ final class AnalyzeModel {
         enqueueMutation { [self] in
             guard !policy.effectivePreview else {
                 registerUndo(for: batch, cli: cli)
-                noticeMessage = "Preview Mode: nothing restored. Turn off Preview Mode to put these items back."
+                showNotice("Preview Mode: nothing restored. Turn off Preview Mode to put these items back.")
                 return
             }
             let report = await self.trashClient.restore(batch.items, self.home)
@@ -419,12 +455,12 @@ final class AnalyzeModel {
             showErrors(report, logFailure: "The restoration couldn’t be written to Mole’s history log.")
             let restored = report.outcomes.filter { $0.error == nil }.count
             if restored > 0 { onFilesMoved?() }
-            noticeMessage = restored > 0 ? "Put back \(String(restored.itemCount.characters))." : nil
+            showNotice(restored > 0 ? "Put back \(String(restored.itemCount.characters))." : nil)
             if !failed.isEmpty {
                 registerUndo(for: TrashedBatch(items: failed), cli: cli)
-                noticeMessage = "Some items couldn’t be put back. Undo can retry them."
+                showNotice("Some items couldn’t be put back. Undo can retry them.", allowsUndo: true)
             }
-            cache.removeAll()
+            clearCache()
             load(cli: cli, refresh: true, clearError: false)
         }
     }
@@ -458,9 +494,14 @@ final class AnalyzeModel {
         }
     }
 
+    private func showNotice(_ message: String?, allowsUndo: Bool = false) {
+        noticeMessage = message
+        noticeShowsUndo = allowsUndo && message != nil && lastTrashed != nil
+    }
+
     func dismissNotice() {
         withAnimation(Motion.glide) {
-            noticeMessage = nil
+            showNotice(nil)
         }
     }
 }

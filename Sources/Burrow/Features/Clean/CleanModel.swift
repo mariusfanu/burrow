@@ -26,15 +26,11 @@ final class CleanModel {
     private var volumeConfirmationCLI: CLIInfo?
     private var reviewCLI: CLIInfo?
 
-    /// Whether the external-volume question is on screen. Dismissing it forgets the volume.
+    /// Whether the external-volume question is on screen. Cancel and Confirm clear
+    /// `volumeAwaitingConfirmation` explicitly so SwiftUI dismissing the alert first cannot no-op.
     var isConfirmingExternalClean: Bool {
         get { volumeAwaitingConfirmation != nil }
-        set {
-            if !newValue {
-                volumeAwaitingConfirmation = nil
-                volumeConfirmationCLI = nil
-            }
-        }
+        set {}
     }
 
 
@@ -170,9 +166,14 @@ final class CleanModel {
 
     func confirmExternalClean(cli: CLIInfo) {
         guard let path = volumeAwaitingConfirmation, volumeConfirmationCLI == cli else { return }
-        isConfirmingExternalClean = false
+        cancelExternalClean()
         isChoosingVolume = false
         cleanExternal(path: path, cli: cli, preview: false)
+    }
+
+    func cancelExternalClean() {
+        volumeAwaitingConfirmation = nil
+        volumeConfirmationCLI = nil
     }
 
     /// Cleans OS metadata from a mounted external volume.
@@ -190,7 +191,7 @@ final class CleanModel {
 
     func invalidateReview() {
         isConfirming = false
-        isConfirmingExternalClean = false
+        cancelExternalClean()
         isChoosingVolume = false
         reviewCLI = nil
         guard state != .running else { return }
@@ -206,7 +207,9 @@ final class CleanModel {
             try WhitelistStore(home: home, cliRoot: cli.root).add(path)
             protectedThisSession.insert(path)
         } catch {
-            errorMessage = "Couldn't update the protected list: \(error.localizedDescription)"
+            let message = "Couldn't update the protected list: \(error.localizedDescription)"
+            errorMessage = message
+            Announcer.say(message)
         }
     }
 }

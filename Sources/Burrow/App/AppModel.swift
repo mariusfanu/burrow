@@ -26,8 +26,14 @@ final class AppModel {
         get { executionPolicy.previewMode }
         set {
             executionPolicy.previewMode = newValue
-            if executionPolicy.effectivePreview {
+            let effective = executionPolicy.effectivePreview
+            if effective {
+                clean.isConfirming = false
+                optimize.isConfirming = false
                 for run in allRuns where run.isRunning && !run.isPreview { run.cancel() }
+            }
+            for flow in [purge, installers, slim] where flow.state == .choosing && flow.isPreviewRun != effective {
+                flow.abandon(because: MenuFlowModel.previewChangedReason)
             }
         }
     }
@@ -197,6 +203,14 @@ final class AppModel {
         }
         let parts = [detail, effectivePreview ? "Preview Mode" : ""].filter { !$0.isEmpty }
         return parts.joined(separator: " · ")
+    }
+
+    private var hasPerformedInitialLocate = false
+
+    func locateCLIOnLaunch() async {
+        guard !hasPerformedInitialLocate else { return }
+        hasPerformedInitialLocate = true
+        await locateCLI()
     }
 
     func locateCLI() async {

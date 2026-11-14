@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct BurrowApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @Environment(\.openWindow) private var openWindow
     @State private var model = AppModel()
 
     var body: some Scene {
@@ -14,7 +15,10 @@ struct BurrowApp: App {
                 #if DEBUG
                 .preferredColorScheme(appearanceOverride)
                 #endif
-                .onAppear { appDelegate.model = model }
+                .onAppear {
+                    appDelegate.model = model
+                    appDelegate.openMainWindow = { openWindow(id: "main") }
+                }
         }
         .defaultSize(width: 1180, height: 780)
         .windowToolbarStyle(.unified)

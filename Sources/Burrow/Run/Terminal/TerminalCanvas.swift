@@ -2,7 +2,19 @@ import AppKit
 import BurrowCore
 
 final class TerminalCanvas: NSView {
-    var terminal: CLITerminal? { didSet { refreshDiagnostics() } }
+    var terminal: CLITerminal? {
+        didSet {
+            if terminal !== oldValue {
+                lastSize = (0, 0)
+                if selectsAllOutput {
+                    selectsAllOutput = false
+                    NSAccessibility.post(element: self, notification: .selectedTextChanged)
+                }
+                resizeTerminalIfNeeded(for: bounds.size)
+            }
+            refreshDiagnostics()
+        }
+    }
     var sendInput: ((String) -> Void)? {
         didSet {
             setAccessibilityHelp(sendInput == nil
@@ -18,6 +30,13 @@ final class TerminalCanvas: NSView {
     private let background = NSColor(hex: 0x1C1C1E)
     private let foreground = NSColor(hex: 0xF2F2F7)
     private var lastSize: (rows: Int, columns: Int) = (0, 0)
+    private var attributeCache: [AttributeKey: [NSAttributedString.Key: Any]] = [:]
+
+    private struct AttributeKey: Hashable {
+        let bold: Bool
+        let underline: Bool
+        let foreground: NSColor
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -87,7 +106,11 @@ final class TerminalCanvas: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        guard let terminal, terminal.isRunning else { return }
+        resizeTerminalIfNeeded(for: newSize)
+    }
+
+    private func resizeTerminalIfNeeded(for newSize: NSSize) {
+        guard let terminal, terminal.isRunning, newSize.width > 0, newSize.height > 0 else { return }
         // The panel is never shown while the app operates a menu, so resizing here
         // can't disturb the tall terminal that the menu driver relies on.
         let columns = max(Int((newSize.width - 16) / cellSize.width), 20)
@@ -135,11 +158,7 @@ final class TerminalCanvas: NSView {
                     rect.fill()
                 }
                 guard text.contains(where: { $0 != " " }) else { continue }
-                var attributes: [NSAttributedString.Key: Any] = [
-                    .font: style.bold ? boldFont : font,
-                    .foregroundColor: fg,
-                ]
-                if style.underline { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+                let attributes = self.attributes(bold: style.bold, underline: style.underline, foreground: fg)
                 (text as NSString).draw(at: CGPoint(x: rect.minX, y: rect.minY + 1), withAttributes: attributes)
             }
         }
@@ -162,8 +181,21 @@ final class TerminalCanvas: NSView {
         case .rgb(let red, let green, let blue):
             return NSColor(srgbRed: CGFloat(red) / 255, green: CGFloat(green) / 255, blue: CGFloat(blue) / 255, alpha: 1)
         case .palette(let index):
-            return Self.paletteColor(index)
+            return Self.palette256[Int(index)]
         }
+    }
+
+    private func attributes(bold: Bool, underline: Bool, foreground: NSColor) -> [NSAttributedString.Key: Any] {
+        let key = AttributeKey(bold: bold, underline: underline, foreground: foreground)
+        if let cached = attributeCache[key] { return cached }
+        var dict: [NSAttributedString.Key: Any] = [
+            .font: bold ? boldFont : font,
+            .foregroundColor: foreground,
+        ]
+        if underline { dict[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+        if attributeCache.count >= 256 { attributeCache.removeAll(keepingCapacity: true) }
+        attributeCache[key] = dict
+        return dict
     }
 
     private static let basePalette: [UInt32] = [
@@ -171,6 +203,7 @@ final class TerminalCanvas: NSView {
         0x8E8E93, 0xFF8A84, 0x86E68F, 0xFFE066, 0x8AC4FF, 0xE5ACFF, 0x8CE8F2, 0xFFFFFF,
     ]
     private static let cubeLevels: [CGFloat] = [0, 95, 135, 175, 215, 255]
+    private static let palette256: [NSColor] = (0...255).map { paletteColor(UInt8($0)) }
 
     private static func paletteColor(_ index: UInt8) -> NSColor {
         switch index {
@@ -224,6 +257,14 @@ final class TerminalCanvas: NSView {
         if let text = NSPasteboard.general.string(forType: .string) {
             sendInput(text)
         }
+    }
+
+    @objc func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(paste(_:)) {
+            return sendInput != nil && terminal?.isRunning == true
+                && NSPasteboard.general.string(forType: .string) != nil
+        }
+        return true
     }
 
     private static func sequence(for event: NSEvent) -> String? {

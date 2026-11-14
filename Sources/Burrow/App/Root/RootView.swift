@@ -15,7 +15,7 @@ struct RootView: View {
         }
         .navigationTitle(model.selection.title)
         .navigationSubtitle(model.subtitle)
-        .task { await model.locateCLI() }
+        .task { await model.locateCLIOnLaunch() }
         #if DEBUG
         .onAppear { model.openSettingsForDebug = { openSettings() } }
         .tint(ProcessInfo.processInfo.environment["BURROW_ACCENT"] == nil ? nil : Color(hex: Theme.accent))

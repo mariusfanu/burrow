@@ -4,7 +4,9 @@ import BurrowCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var model: AppModel?
+    var openMainWindow: (@MainActor () -> Void)?
     private var isTerminating = false
+    private var isConfirmingTermination = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
@@ -24,13 +26,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !isTerminating else { return .terminateLater }
+        guard !isConfirmingTermination else { return .terminateCancel }
         if model?.hasActiveWork == true {
             let alert = NSAlert()
             alert.messageText = "A command is still running"
             alert.informativeText = "Quitting stops it partway. Anything it already finished stays finished."
             alert.addButton(withTitle: "Keep Running")
             alert.addButton(withTitle: "Quit")
-            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+            isConfirmingTermination = true
+            let response = alert.runModal()
+            isConfirmingTermination = false
+            guard response == .alertSecondButtonReturn else { return .terminateCancel }
         }
         isTerminating = true
         let model = model
@@ -62,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let raw = sender.representedObject as? String, let screen = Screen(rawValue: raw) {
             model?.selection = screen
         }
+        openMainWindow?()
         NSApp.activate()
     }
 }

@@ -10,6 +10,7 @@ final class LineOutputBuffer: Sendable {
         var latest = ""
     }
 
+    static let maximumLines = 20_000
     private let state = Mutex(State())
 
     func append(_ chunk: Data) {
@@ -20,13 +21,21 @@ final class LineOutputBuffer: Sendable {
                     state.latest = line.text
                 }
             }
+            if state.lines.count > Self.maximumLines {
+                state.lines.removeFirst(state.lines.count - Self.maximumLines)
+            }
         }
     }
 
     func finish() -> [String] {
         state.withLock { state in
             let tail = state.assembler.partial
-            if !tail.isEmpty { state.lines.append(tail) }
+            if !tail.isEmpty {
+                state.lines.append(tail)
+                if state.lines.count > Self.maximumLines {
+                    state.lines.removeFirst(state.lines.count - Self.maximumLines)
+                }
+            }
             return state.lines
         }
     }

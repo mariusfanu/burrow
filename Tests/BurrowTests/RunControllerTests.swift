@@ -90,6 +90,49 @@ struct RunControllerTests {
         try Data().write(to: release)
         try await eventually { !run.isRunning }
     }
+
+    @Test func promptAnswersAreIgnoredWhenNotRunningOrAfterCancellation() async throws {
+        // 1. Not running (finished run): none of the prompt-answer methods should mutate state.
+        let finished = RunController(policy: .live)
+        finished.start(title: "Done", cli: shellCLI, arguments: ["-c", "printf 'ok\\n'"])
+        try await eventually { !finished.isRunning }
+        #expect(finished.didSucceed)
+        finished.answerDecline()
+        finished.answerYesNo(true)
+        finished.answerSystemClean(useAdmin: true)
+        finished.answerPasswordCancel()
+        #expect(finished.didSucceed)
+        #expect(!finished.wasDeclined)
+
+        // 2. Cancelled while still running (e.g. during termination grace): answers are ignored.
+        let cancelled = RunController(policy: .live)
+        let (cli, directory) = try makeScript("""
+        #!/bin/sh
+        trap '' INT
+        printf 'Delete 1 item  Enter confirm, ESC cancel:'
+        fixture_dir="$(dirname "$0")"
+        while [ -d "$fixture_dir" ] && [ ! -f "$fixture_dir/release" ]; do /bin/sleep 0.02; done
+        """)
+        let release = URL(fileURLWithPath: directory + "/release")
+        defer {
+            try? Data().write(to: release)
+            cancelled.cancel()
+            try? FileManager.default.removeItem(atPath: directory)
+        }
+        cancelled.start(title: "Grace", cli: cli, arguments: [])
+        try await eventually { cancelled.isRunning }
+        cancelled.cancel()
+        #expect(cancelled.wasCancelled)
+        cancelled.answerDecline()
+        cancelled.answerYesNo(true)
+        cancelled.answerSystemClean(useAdmin: true)
+        cancelled.answerPasswordCancel()
+        try Data().write(to: release)
+        try await eventually { !cancelled.isRunning }
+        #expect(cancelled.wasCancelled)
+        #expect(!cancelled.wasDeclined)
+        #expect(!cancelled.didSucceed)
+    }
 }
 
 @MainActor
@@ -144,5 +187,49 @@ struct PromptHandoffTests {
         run.isTerminalVisible = false
         try await eventually { run.promptRequest != nil }
         run.cancel()
+    }
+
+    @Test func answerYesNoAndSystemCleanSendExpectedResponses() async throws {
+        let yesNoRun = RunController(policy: .live)
+        yesNoRun.start(title: "YesNo", cli: shellCLI, arguments: ["-c", "printf 'Proceed? [y/N]: '; read ans; printf \"GOT:%s\\n\" \"$ans\""])
+        try await eventually { yesNoRun.promptRequest != nil }
+        yesNoRun.answerYesNo(true)
+        try await eventually { !yesNoRun.isRunning }
+        #expect(yesNoRun.lines.contains { $0.text.contains("GOT:y") })
+
+        let adminRun = RunController(policy: .live)
+        adminRun.start(title: "Admin", cli: shellCLI, arguments: ["-c", "printf '➤ System caches need sudo — Enter to run, Space to skip:'; IFS= read -rsn1 key; if [ -z \"$key\" ]; then printf '\\nGOT:ENTER\\n'; else printf '\\nGOT:SPACE\\n'; fi"])
+        try await eventually { adminRun.promptRequest != nil }
+        adminRun.answerSystemClean(useAdmin: true)
+        try await eventually { !adminRun.isRunning }
+        #expect(adminRun.lines.contains { $0.text.contains("GOT:ENTER") })
+    }
+
+    @Test func passwordRejectionsIncrementAndCancelEndsRun() async throws {
+        let run = RunController(policy: .live)
+        run.start(title: "Password", cli: shellCLI, arguments: ["-c", "/bin/stty -echo; printf 'Sorry, try again.\\nPassword:'; read pw"])
+        try await eventually { run.promptRequest != nil }
+        #expect(run.passwordRejections == 1)
+
+        // When !allowsTerminalInput and guarded plan is not approved, answerPassword clears promptRequest.
+        run.answerPassword("secret")
+        #expect(run.promptRequest == nil)
+
+        run.answerPasswordCancel()
+        try await eventually { !run.isRunning }
+    }
+
+    @Test func maximumLogRowsCapsLinesAndProgressClampsSections() async throws {
+        let run = RunController(policy: .live)
+        run.start(
+            title: "Long",
+            expectedSections: 2,
+            cli: shellCLI,
+            arguments: ["-c", "printf '➤ One\\n➤ Two\\n➤ Three\\n'; i=0; while [ $i -lt 20050 ]; do printf 'line %d\\n' $i; i=$((i+1)); done"]
+        )
+        try await eventually { !run.isRunning }
+        #expect(run.lines.count == 20_000)
+        #expect(run.hiddenLineCount > 0)
+        #expect(run.progress == 1.0)
     }
 }

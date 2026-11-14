@@ -8,7 +8,12 @@ final class VisibilityView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         observation = nil
-        guard let window else { changed?(false); return }
+        guard let window else {
+            Task { @MainActor [weak self] in
+                self?.publishVisibility()
+            }
+            return
+        }
         let center = NotificationCenter.default
         observation = center.publisher(for: NSWindow.didChangeOcclusionStateNotification, object: window)
             .merge(with: center.publisher(for: NSWindow.didMiniaturizeNotification, object: window),
@@ -19,7 +24,9 @@ final class VisibilityView: NSView {
             .sink { [weak self] _ in
                 MainActor.assumeIsolated { self?.publishVisibility() }
             }
-        publishVisibility()
+        Task { @MainActor [weak self] in
+            self?.publishVisibility()
+        }
     }
 
     private func publishVisibility() {

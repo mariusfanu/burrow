@@ -24,6 +24,9 @@ final class RunController {
     var promptRequest: PromptRequest?
     var isTerminalVisible = false {
         didSet {
+            if !oldValue, isTerminalVisible {
+                screenRevision &+= 1
+            }
             // Hiding the terminal with its question unanswered brings the sheet back.
             guard oldValue, !isTerminalVisible, promptIsInTerminal else { return }
             promptIsInTerminal = false
@@ -254,26 +257,27 @@ final class RunController {
     }
 
     func answerDecline() {
+        guard isRunning, !wasCancelled else { return }
         wasDeclined = true
         markAnswered()
         terminal?.send("\u{1B}")
     }
 
     func answerYesNo(_ yes: Bool) {
-        guard allowsTerminalInput, mayAnswerCommand() else { return }
+        guard isRunning, !wasCancelled, allowsTerminalInput, mayAnswerCommand() else { return }
         markAnswered()
         terminal?.send(yes ? "y\r" : "n\r")
     }
 
     func answerSystemClean(useAdmin: Bool) {
-        guard allowsTerminalInput, mayAnswerCommand() else { return }
+        guard isRunning, !wasCancelled, allowsTerminalInput, mayAnswerCommand() else { return }
         markAnswered()
         terminal?.send(useAdmin ? "\r" : " ")
     }
 
     /// Hands the password to `sudo` and keeps no copy of it.
     func answerPassword(_ password: String) {
-        guard mayAnswerCommand() else { return }
+        guard isRunning, !wasCancelled, mayAnswerCommand() else { return }
         // Re-checked at the last moment: with echo on, the text would appear on screen.
         guard let terminal, terminal.isEchoOff else {
             promptRequest = nil
@@ -281,7 +285,10 @@ final class RunController {
         }
         if !allowsTerminalInput {
             guard approvedGuardedPlan, let prompt = promptRequest?.prompt, case .password = prompt,
-                  PromptDetector.detect(partial: terminal.partial) == prompt else { return }
+                  PromptDetector.detect(partial: terminal.partial) == prompt else {
+                promptRequest = nil
+                return
+            }
         }
         markAnswered()
         terminal.send(password + "\r")
@@ -297,6 +304,7 @@ final class RunController {
 
     /// Abandons a password prompt, which `sudo` treats as Ctrl-C.
     func answerPasswordCancel() {
+        guard isRunning, !wasCancelled else { return }
         markAnswered()
         terminal?.send("\u{03}")
     }
@@ -307,6 +315,7 @@ final class RunController {
         // A finished line means the prompt that was answered is gone, so identical text
         // on the new line is a new question. sudo re-asks with the same "Password:".
         answeredPartial = nil
+        promptIsInTerminal = false
         if confirmationCheck != nil {
             if case .confirm = promptRequest?.prompt { promptRequest = nil }
             if raw.trimmingCharacters(in: .whitespaces) == "Files to be removed:" {
@@ -387,7 +396,7 @@ final class RunController {
     }
 
     private func terminalChanged() {
-        screenRevision &+= 1
+        if isTerminalVisible { screenRevision &+= 1 }
         guard let terminal else { return }
         let partial = terminal.partial
         if partial != answeredPartial { answeredPartial = nil }
@@ -395,7 +404,7 @@ final class RunController {
 
         let detected = PromptDetector.detect(partial: partial)
         activity = detected == nil ? cleanActivity(partial) : ""
-        guard answeredPartial == nil else { return }
+        guard answeredPartial == nil, !promptIsInTerminal else { return }
 
         guard let prompt = detected else {
             promptCheck?.cancel()

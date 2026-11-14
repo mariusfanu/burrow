@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 import BurrowCore
 @testable import Burrow
@@ -137,5 +138,38 @@ struct AppCoordinationTests {
         #expect(model.run(for: .clean) === model.clean.run)
         model.clean.run.promptRequest = nil
         #expect(!model.needsAttention(.clean))
+    }
+
+    @Test func analyzeActionsAreNilWithoutBundledTools() async {
+        // fixtureCLI has root "/fixture" with no bin/analyze-go, so hasBundledTools == false.
+        let model = AppModel(defaults: nil, environment: [:], locator: { _ in fixtureCLI })
+        await model.locateCLI()
+        #expect(model.cli?.hasBundledTools == false)
+        model.selection = .analyze
+        #expect(model.secondaryAction == nil)
+        #expect(model.primaryAction == nil)
+        #expect(model.reloadAction == nil)
+    }
+
+    @Test func locateCLIOnLaunchRunsOnlyOnceAcrossReopens() async {
+        let counter = OSAllocatedUnfairLock(initialState: 0)
+        let model = AppModel(defaults: nil, environment: [:], locator: { _ in
+            counter.withLock { $0 += 1 }
+            return fixtureCLI
+        })
+        await model.locateCLIOnLaunch()
+        await model.locateCLIOnLaunch()
+        #expect(counter.withLock { $0 } == 1)
+    }
+
+    @Test func shutdownDisablesPageActionsAndSearchFocusStaysFalseByDefault() async {
+        let model = AppModel(defaults: nil, environment: [:], locator: { _ in fixtureCLI })
+        await model.locateCLI()
+        model.selection = .uninstall
+        #expect(!model.isSearchFocused)
+        await model.shutdown(lifecycle: ProcessLifecycle())
+        #expect(model.isShuttingDown)
+        #expect(model.primaryAction == nil)
+        #expect(model.secondaryAction == nil)
     }
 }

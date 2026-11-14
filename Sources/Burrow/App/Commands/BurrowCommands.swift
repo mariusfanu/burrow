@@ -17,7 +17,7 @@ struct BurrowCommands: Commands {
         CommandGroup(after: .textEditing) {
             Button("Find") { model.isSearchFocused = true }
                 .keyboardShortcut("f")
-                .disabled(model.selection != .uninstall)
+                .disabled(model.isShuttingDown || model.cli == nil || model.selection != .uninstall || model.uninstall.state != .list)
         }
 
         CommandGroup(before: .sidebar) {
@@ -25,13 +25,13 @@ struct BurrowCommands: Commands {
                 model.previewMode.toggle()
             }
             .keyboardShortcut("p", modifiers: [.command, .shift])
-            .disabled(!model.isPreviewToggleEnabled)
+            .disabled(model.isShuttingDown || !model.isPreviewToggleEnabled)
 
             Button(model.currentRun?.isTerminalVisible == true ? "Hide Terminal" : "Show Terminal") {
                 model.currentRun?.isTerminalVisible.toggle()
             }
             .keyboardShortcut("t", modifiers: [.command, .shift])
-            .disabled(model.currentRun?.terminal == nil)
+            .disabled(model.isShuttingDown || model.currentRun?.terminal == nil)
             Divider()
         }
 
@@ -49,13 +49,14 @@ struct BurrowCommands: Commands {
             ForEach(Screen.allCases) { screen in
                 Button(screen.title) { model.selection = screen }
                     .keyboardShortcut(screen.goShortcut)
+                    .disabled(model.isShuttingDown)
             }
             Divider()
             Button("Back") {
                 if let cli = model.cli { model.analyze.goBack(cli: cli) }
             }
             .keyboardShortcut("[", modifiers: .command)
-            .disabled(model.selection != .analyze || !model.analyze.canGoBack)
+            .disabled(model.isShuttingDown || model.selection != .analyze || !model.analyze.canGoBack)
         }
 
         CommandGroup(replacing: .help) {
@@ -64,7 +65,9 @@ struct BurrowCommands: Commands {
             Divider()
             Link("Mole CLI Documentation", destination: URL(string: "https://github.com/tw93/Mole#readme")!)
             Button("Show Mole Logs") {
-                FilePicker.reveal(AppModel.home + "/Library/Logs/mole/operations.log")
+                let log = AppModel.home + "/Library/Logs/mole/operations.log"
+                let target = FileManager.default.fileExists(atPath: log) ? log : (log as NSString).deletingLastPathComponent
+                FilePicker.reveal(target)
             }
         }
     }

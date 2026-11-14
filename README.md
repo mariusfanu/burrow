@@ -173,7 +173,7 @@ Run the suite in release before shipping, because `scripts/build-app.sh` uses th
 swift test -c release -Xswiftc -enable-testing
 ```
 
-`BurrowTests` covers the app models as well as the core engine tests. Its injected
+`BurrowCoreTests` covers the core engine and `BurrowTests` covers the app models and UI/rendering tests. Its injected
 command and Trash clients exercise cancellation, stale results, Preview Mode and
 Undo without running cleanup on the host Mac. Regression coverage includes
 incremental preview parsing, size-measurement retries and ordering, CLI discovery,
@@ -203,9 +203,9 @@ Sources/CPTY         forkpty wrapper in C
 Sources/BurrowCore   CLI engine: terminal model, parsers, menu driver, safety rules, config files
 Sources/Burrow       SwiftUI app: design system, run panel, one folder per feature
 Resources            The layered Liquid Glass app icon
-docs                 Design system and HIG audit
+docs                 Design system, HIG audit, refactoring notes and images
 Tests                Parser, terminal, safety and sandboxed CLI tests
-scripts              App bundle and icon builders
+scripts              App bundle, icon and DMG release builders
 ```
 
 Each feature folder holds its models and one Swift file per view.

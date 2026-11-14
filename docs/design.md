@@ -15,7 +15,7 @@ Burrow should feel calm and trustworthy. The feeling it aims for is relief: you 
 
 ## Motion
 
-All motion comes from `Sources/Burrow/DesignSystem/Motion.swift`, so Reduce Motion is honored in one place. When it's on, movement, scale and blur become short fades.
+All motion comes from `Sources/Burrow/DesignSystem/Motion/Motion.swift`, so Reduce Motion is honored in one place. When it's on, movement, scale and blur become short fades.
 
 | Token | Animation | Used for |
 |---|---|---|

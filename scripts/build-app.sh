@@ -5,6 +5,14 @@ set -euo pipefail
 
 configuration="${1:-release}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ $# -ge 2 ] && [ -n "$2" ]; then
+    case "$2" in
+        /*) output_directory="$2" ;;
+        *) output_directory="$(pwd)/$2" ;;
+    esac
+else
+    output_directory="$root/build"
+fi
 cd "$root"
 
 bundle_version="$(awk -F'"' '/^[[:space:]]*MARKETING_VERSION:/ { print $2 }' project.yml)"
@@ -17,7 +25,6 @@ fi
 swift build -c "$configuration" --product Burrow
 binary="$(swift build -c "$configuration" --show-bin-path)/Burrow"
 
-output_directory="${2:-"$root/build"}"
 app="$output_directory/Burrow.app"
 rm -rf "$app" # SAFE: rebuilds this script's own output directory.
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"

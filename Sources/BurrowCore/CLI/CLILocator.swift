@@ -23,13 +23,27 @@ public enum CLILocator {
     /// write to, such as `~/.local/bin`, must not be able to stand in for it.
     private static let systemDirectories = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
 
+    /// Environment variables that alter shell/loader behavior when passed to privileged or
+    /// Bash-based CLI helpers.
+    private static let blockedEnvironmentKeys: Set<String> = [
+        "BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "CDPATH", "IFS", "SUDO_ASKPASS",
+    ]
+    private static let blockedEnvironmentPrefixes = ["DYLD_", "BASH_FUNC_"]
+
     public static func environment(base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
-        var environment = base
-        let inherited = (base["PATH"] ?? "").split(separator: ":").map(String.init)
+        var environment: [String: String] = [:]
+        for (key, value) in base {
+            if blockedEnvironmentKeys.contains(key)
+                || blockedEnvironmentPrefixes.contains(where: { key.hasPrefix($0) }) {
+                continue
+            }
+            environment[key] = value
+        }
+        let inherited = (base["PATH"] ?? "").split(separator: ":").map(String.init).filter { $0.hasPrefix("/") }
         var seen = Set<String>()
         environment["PATH"] = (systemDirectories + searchDirectories + inherited).filter { seen.insert($0).inserted }.joined(separator: ":")
-        environment["LANG"] = base["LANG"] ?? "en_US.UTF-8"
-        environment["LC_CTYPE"] = base["LC_CTYPE"] ?? "en_US.UTF-8"
+        environment["LANG"] = environment["LANG"] ?? "en_US.UTF-8"
+        environment["LC_CTYPE"] = environment["LC_CTYPE"] ?? "en_US.UTF-8"
         return environment
     }
 
@@ -55,7 +69,8 @@ public enum CLILocator {
         for path in candidatePaths(customPath: customPath)
         where fileManager.isExecutableFile(atPath: path) && isSafeToRun(path) {
             let result = try? await CommandRunner.run(executable: path, arguments: ["--version"], timeout: 15)
-            guard let result, result.status == 0, let info = parseVersionOutput(result.stdout, executable: path) else {
+            guard let result, result.status == 0, let info = parseVersionOutput(result.stdout, executable: path),
+                  isTrustedInstallation(info) else {
                 continue
             }
             return info
@@ -63,8 +78,28 @@ public enum CLILocator {
         return nil
     }
 
+    private static func isTrustedInstallation(_ info: CLIInfo) -> Bool {
+        guard isSafeDirectory(info.root) else { return false }
+        let fileManager = FileManager.default
+        for helper in ["status-go", "analyze-go"] {
+            let helperPath = info.root + "/bin/" + helper
+            if fileManager.fileExists(atPath: helperPath), !isSafeToRun(helperPath) {
+                return false
+            }
+        }
+        return true
+    }
+
     /// Check each path component, including intermediate symlink destinations.
     static func isSafeToRun(_ path: String) -> Bool {
+        isSafePath(path, expectDirectory: false)
+    }
+
+    static func isSafeDirectory(_ path: String) -> Bool {
+        isSafePath(path, expectDirectory: true)
+    }
+
+    private static func isSafePath(_ path: String, expectDirectory: Bool) -> Bool {
         guard path.hasPrefix("/"), !path.utf8.contains(0) else { return false }
         var pending = Array(path.split(separator: "/").reversed())
         var directory = ""
@@ -91,15 +126,15 @@ public enum CLILocator {
             case S_IFDIR:
                 let writableByOthers = info.st_mode & S_IWOTH != 0
                 let writableByGroup = info.st_mode & S_IWGRP != 0
-                let sticky = info.st_mode & S_ISVTX != 0
                 // Homebrew's shared directories can be writable by the macOS admin group.
                 let brewAdmin = info.st_gid == 80 && ["/opt/homebrew", "/usr/local"].contains {
                     candidate == $0 || candidate.hasPrefix($0 + "/")
                 }
-                guard sticky || (!writableByOthers && (!writableByGroup || brewAdmin)) else { return false }
+                guard !writableByOthers && (!writableByGroup || brewAdmin) else { return false }
+                if expectDirectory, pending.isEmpty { return true }
                 directory = candidate
             case S_IFREG:
-                return pending.isEmpty && info.st_mode & (S_IWGRP | S_IWOTH) == 0
+                return !expectDirectory && pending.isEmpty && info.st_mode & (S_IWGRP | S_IWOTH) == 0
             default:
                 return false
             }
@@ -135,19 +170,21 @@ public enum CLILocator {
         let fileManager = FileManager.default
         let resolved = URL(fileURLWithPath: executable).resolvingSymlinksInPath()
         let direct = resolved.deletingLastPathComponent().path
-        if fileManager.fileExists(atPath: direct + "/lib/core/base.sh") { return direct }
+        if fileManager.fileExists(atPath: direct + "/lib/core/base.sh"), isSafeDirectory(direct) { return direct }
 
         // A Homebrew prefix keeps the tree in libexec beside its bin directory.
         let prefix = resolved.deletingLastPathComponent().deletingLastPathComponent().path
         for candidate in [prefix + "/libexec", prefix + "/lib/mole", prefix + "/share/mole"]
-        where fileManager.fileExists(atPath: candidate + "/lib/core/base.sh") {
+        where fileManager.fileExists(atPath: candidate + "/lib/core/base.sh") && isSafeDirectory(candidate) {
             return candidate
         }
         // A generated wrapper script names its target with an absolute path.
         if let script = try? String(contentsOf: resolved, encoding: .utf8) {
             for match in script.matches(of: wrapperPattern) {
                 let candidate = String(match.1)
-                if fileManager.fileExists(atPath: candidate + "/lib/core/base.sh") { return candidate }
+                if fileManager.fileExists(atPath: candidate + "/lib/core/base.sh"), isSafeDirectory(candidate) {
+                    return candidate
+                }
             }
         }
         return direct

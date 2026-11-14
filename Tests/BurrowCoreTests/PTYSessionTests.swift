@@ -84,4 +84,61 @@ struct PTYSessionTests {
         #expect(received == Data(repeating: 0x61, count: half) + Data(repeating: 0x62, count: half))
         #expect(lifecycle.activeProcessCount == 0)
     }
+
+    @Test func deallocatingSuspendedSessionDoesNotCrash() async throws {
+        var session: PTYSession? = try PTYSession(
+            executable: "/usr/bin/yes",
+            arguments: [],
+            environment: CLILocator.environment(),
+            lifecycle: ProcessLifecycle(),
+            highWaterMark: 1_024
+        )
+        #expect(session != nil)
+        try await Task.sleep(for: .milliseconds(100))
+        session = nil
+        try await Task.sleep(for: .milliseconds(100))
+    }
+
+    @Test func writeAfterExitAndTerminationAreIgnored() async throws {
+        let session = try PTYSession(
+            executable: "/usr/bin/true",
+            arguments: [],
+            environment: CLILocator.environment(),
+            lifecycle: ProcessLifecycle()
+        )
+        #expect(await session.waitForExit() == 0)
+        session.write("after-exit\n")
+        session.write([0x41, 0x42])
+
+        let terminated = try PTYSession(
+            executable: "/bin/sleep",
+            arguments: ["5"],
+            environment: CLILocator.environment(),
+            lifecycle: ProcessLifecycle()
+        )
+        terminated.terminate(grace: 0)
+        terminated.write("after-terminate\n")
+        _ = await terminated.waitForExit()
+    }
+
+    @Test func echoStateIsNilAfterExitOrTermination() async throws {
+        let session = try PTYSession(
+            executable: "/usr/bin/true",
+            arguments: [],
+            environment: CLILocator.environment(),
+            lifecycle: ProcessLifecycle()
+        )
+        #expect(await session.waitForExit() == 0)
+        #expect(session.isEchoEnabled == nil)
+
+        let terminated = try PTYSession(
+            executable: "/bin/sleep",
+            arguments: ["5"],
+            environment: CLILocator.environment(),
+            lifecycle: ProcessLifecycle()
+        )
+        terminated.terminate(grace: 0)
+        _ = await terminated.waitForExit()
+        #expect(terminated.isEchoEnabled == nil)
+    }
 }

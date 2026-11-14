@@ -52,7 +52,9 @@ public enum CLICompatibility: Equatable, Sendable {
         var result: [Int] = []
         result.reserveCapacity(parts.count)
         for part in parts {
-            guard let number = Int(part) else { return nil }
+            guard !part.isEmpty,
+                  part.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  let number = Int(part) else { return nil }
             result.append(number)
         }
         return result

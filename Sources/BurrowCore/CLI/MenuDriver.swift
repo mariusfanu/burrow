@@ -55,8 +55,6 @@ public final class MenuDriver {
         verifiedRevision = nil
         knownItems = []
         guard let first = snapshot, first.cursor != nil else { throw MenuDriverError.menuClosed }
-        // The cursor starts on the first row.
-        cursorIndex = 0
         let total = first.reportedTotal ?? first.rows.count
         let isPaged = total > first.rows.count
         if isPaged, first.position == nil {
@@ -64,6 +62,14 @@ public final class MenuDriver {
         }
         guard total >= first.rows.count else {
             throw MenuDriverError.verificationFailed("the list reports fewer rows than it shows")
+        }
+        if let position = first.position {
+            guard position.current > 0, position.current <= total else {
+                throw MenuDriverError.verificationFailed("the cursor position is out of range")
+            }
+            cursorIndex = position.current - 1
+        } else {
+            cursorIndex = first.rows.firstIndex(where: \.isCursor) ?? 0
         }
         let readsPaths = first.focusedPath != nil
 
@@ -150,7 +156,9 @@ public final class MenuDriver {
             }
             guard known.preselected != shouldSelect else { continue }
 
-            let beforeCount = before.reportedSelectedCount
+            guard let beforeCount = before.reportedSelectedCount, (0...knownItems.count).contains(beforeCount) else {
+                throw MenuDriverError.verificationFailed("the list doesn't report a valid selected count")
+            }
             terminal.send(" ")
             try await waitUntil { [self] in
                 guard let menu = snapshot, let cursor = menu.cursor, focusedIndex(in: menu) == known.index,
@@ -158,7 +166,6 @@ public final class MenuDriver {
                       known.path.map({ menu.focusedPath == $0 }) ?? true else {
                     return false
                 }
-                guard let beforeCount, (0...knownItems.count).contains(beforeCount) else { return false }
                 return menu.reportedSelectedCount == beforeCount + (shouldSelect ? 1 : -1)
             }
         }

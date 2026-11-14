@@ -44,13 +44,13 @@ public enum CommandRunner {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int32, Error>) in
                 let drain = PipeDrain()
-                drain.read(outPipe, into: onStdout)
-                drain.read(errPipe, into: onStderr)
 
                 do {
                     try box.start(executable: executable, arguments: arguments, environment: environment,
                                   output: outPipe.fileHandleForWriting.fileDescriptor,
                                   error: errPipe.fileHandleForWriting.fileDescriptor)
+                    drain.read(outPipe, into: onStdout)
+                    drain.read(errPipe, into: onStderr)
                     // The child owns its duplicated writers; EOF must not depend on the parent.
                     try? outPipe.fileHandleForWriting.close()
                     try? errPipe.fileHandleForWriting.close()
@@ -65,7 +65,7 @@ public enum CommandRunner {
                 box.wait { status, reason in
                     // A detached helper may keep a writer open. Stop accepting reads after
                     // the deadline, then let already admitted callbacks finish.
-                    let reachedEOF = drain.waitForEOF()
+                    let reachedEOF = reason == nil ? drain.waitForEOF() : false
                     drain.stop(outPipe, errPipe)
                     drain.deliveries.notify(queue: .global()) {
                         switch reason {
@@ -124,7 +124,7 @@ private final class PipeDrain: Sendable {
         if endOfFile.wait(timeout: .now() + 1) == .success { return true }
         guard deliveries.wait(timeout: .now()) == .timedOut else { return false }
         // FileHandle can wait for the previous callback before reporting EOF.
-        deliveries.wait()
+        _ = deliveries.wait(timeout: .now() + 1)
         return endOfFile.wait(timeout: .now() + 1) == .success
     }
 }

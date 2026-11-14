@@ -332,6 +332,124 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: directory + "/input"))
     }
 
+    @Test func waitForMenuTimesOutWhenMenuNeverAppears() async throws {
+        let (script, _) = try makeScript("""
+        #!/bin/bash
+        printf 'Scanning...\n'
+        sleep 2
+        """)
+        let terminal = try CLITerminal(executable: script, arguments: [], environment: CLILocator.environment())
+        defer { terminal.cancel() }
+        let driver = MenuDriver(terminal: terminal)
+        await #expect(throws: MenuDriverError.menuDidNotAppear) {
+            _ = try await driver.waitForMenu(timeout: 0.15)
+        }
+    }
+
+    @Test func selectRejectsEmptyDuplicateAndInvalidWantedRows() async throws {
+        let (terminal, _) = try await fakeMenu()
+        defer { terminal.cancel() }
+        let driver = MenuDriver(terminal: terminal)
+        _ = try #require(try await driver.waitForMenu(timeout: 20))
+        let items = try await driver.readItems()
+
+        await #expect(throws: MenuDriverError.self) { try await driver.select([]) }
+        await #expect(throws: MenuDriverError.self) { try await driver.select([items[0], items[0]]) }
+        let outOfBounds = MenuItem(
+            index: items.count,
+            rowText: "bad",
+            name: "bad",
+            sizeText: nil,
+            bytes: 0,
+            tag: nil,
+            age: nil,
+            preselected: false
+        )
+        await #expect(throws: MenuDriverError.self) { try await driver.select([outOfBounds]) }
+        driver.quit()
+        _ = await terminal.waitForExit()
+    }
+
+    @Test func confirmRejectsRevisionMismatchAfterScreenChanges() async throws {
+        let (script, directory) = try makeScript(#"""
+        #!/bin/bash
+        stty -echo -icanon
+        printf 'Select, 0 selected\r\n'
+        printf '➤ ○ one   1.0MB\r\n'
+        printf '↑↓ | Space Select | Enter Confirm | Q Quit\r\n'
+        while IFS= read -rsn1 key; do
+          if [[ $key == " " ]]; then
+            printf '\033[1;1HSelect, 1 selected\r\n'
+            printf '➤ ● one   1.0MB\r\n'
+            (sleep 0.15; printf '\033[1;1HSelect, 1 selected (updated)\r\n') &
+          elif [[ $key == q ]]; then
+            exit 0
+          elif [[ $key == "" ]]; then
+            touch "$(dirname "$0")/confirmed"
+            exit 0
+          fi
+        done
+        """#)
+        let terminal = try CLITerminal(executable: script, arguments: [], environment: CLILocator.environment())
+        defer { terminal.cancel() }
+        let driver = MenuDriver(terminal: terminal)
+        _ = try #require(try await driver.waitForMenu(timeout: 20))
+        let items = try await driver.readItems()
+        try await driver.select(items)
+        // Wait for the background screen update to bump terminal.screen.revision.
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(throws: MenuDriverError.self) { try driver.confirm() }
+        driver.quit()
+        _ = await terminal.waitForExit()
+        #expect(!FileManager.default.fileExists(atPath: directory + "/confirmed"))
+    }
+
+    @Test func selectRejectsMissingSelectedCountWithoutSendingSpace() async throws {
+        let (script, directory) = try makeScript(#"""
+        #!/bin/bash
+        printf 'Select\r\n'
+        printf '➤ ○ one   1.0MB\r\n'
+        printf '↑↓ | Space Select | Enter Confirm\r\n'
+        while IFS= read -rsn1 key; do
+          if [[ $key == " " ]]; then
+            touch "$(dirname "$0")/spaced"
+          elif [[ $key == q ]]; then
+            exit 0
+          fi
+        done
+        """#)
+        let terminal = try CLITerminal(executable: script, arguments: [], environment: CLILocator.environment())
+        defer { terminal.cancel() }
+        let driver = MenuDriver(terminal: terminal)
+        _ = try #require(try await driver.waitForMenu(timeout: 20))
+        let items = try await driver.readItems()
+        await #expect(throws: MenuDriverError.self) { try await driver.select(items) }
+        driver.quit()
+        _ = await terminal.waitForExit()
+        #expect(!FileManager.default.fileExists(atPath: directory + "/spaced"))
+    }
+
+    @Test func readItemsRejectsPagedListWithoutPosition() async throws {
+        let (script, _) = try makeScript(#"""
+        #!/bin/bash
+        printf 'Select\r\n'
+        printf '0/5 selected\r\n'
+        printf '➤ ○ one   1.0MB\r\n'
+        printf '  ○ two   1.0MB\r\n'
+        printf '↑↓ | Space Select | Enter Confirm\r\n'
+        while IFS= read -rsn1 key; do
+          [[ $key == q ]] && exit 0
+        done
+        """#)
+        let terminal = try CLITerminal(executable: script, arguments: [], environment: CLILocator.environment())
+        defer { terminal.cancel() }
+        let driver = MenuDriver(terminal: terminal)
+        _ = try #require(try await driver.waitForMenu(timeout: 20))
+        await #expect(throws: MenuDriverError.self) { _ = try await driver.readItems() }
+        driver.quit()
+        _ = await terminal.waitForExit()
+    }
+
     @Test func echoStateIsVisibleToThePasswordCheck() async throws {
         let (script, _) = try makeScript("#!/bin/bash\nprintf 'Password:'\nsleep 1\nstty -echo\nsleep 5\n")
 

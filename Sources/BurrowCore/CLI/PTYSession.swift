@@ -7,25 +7,34 @@ import Foundation
 /// Used only on the session's queue.
 private final class MasterDescriptor: @unchecked Sendable {
     let fd: Int32
+    private let queue: DispatchQueue
     private var activeSources = 0
     private var closeRequested = false
     private var isClosed = false
 
-    init(fd: Int32) { self.fd = fd }
+    init(fd: Int32, queue: DispatchQueue) {
+        self.fd = fd
+        self.queue = queue
+    }
 
-    func sourceStarted() { activeSources += 1 }
+    func sourceStarted() {
+        activeSources += 1
+    }
 
     func sourceEnded() {
+        dispatchPrecondition(condition: .onQueue(queue))
         activeSources -= 1
         closeIfUnused()
     }
 
     func requestClose() {
+        dispatchPrecondition(condition: .onQueue(queue))
         closeRequested = true
         closeIfUnused()
     }
 
     private func closeIfUnused() {
+        dispatchPrecondition(condition: .onQueue(queue))
         guard closeRequested, activeSources == 0, !isClosed else { return }
         isClosed = true
         close(fd)
@@ -113,7 +122,7 @@ public final class PTYSession: @unchecked Sendable {
         guard !registration.isStopRequested else { throw CancellationError() }
         var masterFD: Int32 = -1
         var childPID: pid_t = 0
-        let result = withSpawnArguments(executable: executable, arguments: arguments, environment: environment) { argv, envp in
+        let result = try withSpawnArguments(executable: executable, arguments: arguments, environment: environment) { argv, envp in
             cpty_spawn(executable, argv, envp, rows, columns, &masterFD, &childPID)
         }
         guard result == 0 else { throw PTYError.spawnFailed(result) }
@@ -128,7 +137,7 @@ public final class PTYSession: @unchecked Sendable {
         }
 
         master = masterFD
-        descriptor = MasterDescriptor(fd: masterFD)
+        descriptor = MasterDescriptor(fd: masterFD, queue: queue)
         self.highWaterMark = highWaterMark
         lowWaterMark = highWaterMark / 4
         pid = childPID
@@ -144,11 +153,16 @@ public final class PTYSession: @unchecked Sendable {
     }
 
     deinit {
-        resumeReadingIfSuspended()
-        readSource?.cancel()
-        writeSource?.cancel()
+        let readSource = readSource
+        let writeSource = writeSource
+        let isReadSuspended = isReadSuspended
         let descriptor = descriptor
-        queue.async { descriptor.requestClose() }
+        queue.async {
+            if isReadSuspended { readSource?.resume() }
+            readSource?.cancel()
+            writeSource?.cancel()
+            descriptor.requestClose()
+        }
     }
 
     /// Enqueues input in order. A full terminal input buffer yields to its write
@@ -169,6 +183,7 @@ public final class PTYSession: @unchecked Sendable {
     public func write(_ text: String) { write(Array(text.utf8)) }
 
     private func flushInput() {
+        dispatchPrecondition(condition: .onQueue(queue))
         guard !masterClosed else { return }
         // Bound one dispatch turn even if a reader continuously accepts input.
         var sent = 0
@@ -176,8 +191,9 @@ public final class PTYSession: @unchecked Sendable {
         while inputOffset < pendingInput.count, sent < 65_536, attempts < 16 {
             attempts += 1
             let amount = min(pendingInput.count - inputOffset, 65_536 - sent)
-            let written = pendingInput.withUnsafeBytes {
-                Darwin.write(master, $0.baseAddress!.advanced(by: inputOffset), amount)
+            let written = pendingInput.withUnsafeBytes { buffer -> Int in
+                guard let base = buffer.baseAddress else { return 0 }
+                return Darwin.write(master, base.advanced(by: inputOffset), amount)
             }
             if written > 0 {
                 inputOffset += written
@@ -200,6 +216,7 @@ public final class PTYSession: @unchecked Sendable {
     }
 
     private func ensureWriteSource() {
+        dispatchPrecondition(condition: .onQueue(queue))
         guard writeSource == nil, !masterClosed else { return }
         let source = DispatchSource.makeWriteSource(fileDescriptor: master, queue: queue)
         source.setEventHandler { [weak self] in self?.flushInput() }
@@ -352,12 +369,14 @@ public final class PTYSession: @unchecked Sendable {
     }
 
     private func reap() {
+        dispatchPrecondition(condition: .onQueue(queue))
         guard exitStatus == nil,
               terminationPhase == .none || terminationPhase == .killed else { return }
         if let status = reapIfExited(pid) { recordExit(status) }
     }
 
     private func recordExit(_ status: Int32) {
+        dispatchPrecondition(condition: .onQueue(queue))
         exitStatus = status
         discardInput()
         exitWatcher?.stop()
@@ -371,6 +390,7 @@ public final class PTYSession: @unchecked Sendable {
     /// A helper can hold the terminal open after the command exits, so reading stops after a
     /// short grace. A slow consumer holding reads back gets time to catch up first.
     private func finishAfterDraining(graceServed: Bool, attemptsLeft: Int) {
+        dispatchPrecondition(condition: .onQueue(queue))
         guard continuation != nil else { return }
         if isReadSuspended, attemptsLeft > 0 {
             queue.asyncAfter(deadline: .now() + 0.1) { [weak self] in
@@ -386,6 +406,7 @@ public final class PTYSession: @unchecked Sendable {
     }
 
     private func finishStream() {
+        dispatchPrecondition(condition: .onQueue(queue))
         // A suspended source never reports its cancellation.
         resumeReadingIfSuspended()
         readSource?.cancel()
@@ -397,6 +418,7 @@ public final class PTYSession: @unchecked Sendable {
     }
 
     private func closeMaster() {
+        dispatchPrecondition(condition: .onQueue(queue))
         guard !masterClosed else { return }
         masterClosed = true
         descriptor.requestClose()

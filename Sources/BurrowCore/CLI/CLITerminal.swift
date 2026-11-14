@@ -35,8 +35,8 @@ public final class CLITerminal {
             executable: executable,
             arguments: arguments,
             environment: env,
-            rows: UInt16(rows),
-            columns: UInt16(columns)
+            rows: UInt16(clamping: max(rows, 1)),
+            columns: UInt16(clamping: max(columns, 1))
         )
         Task { [weak self, session] in
             for await chunk in session.output {
@@ -85,7 +85,7 @@ public final class CLITerminal {
 
     public func resize(rows: Int, columns: Int) {
         screen.resize(rows: rows, columns: columns)
-        session.resize(rows: UInt16(rows), columns: UInt16(columns))
+        session.resize(rows: UInt16(clamping: max(rows, 1)), columns: UInt16(clamping: max(columns, 1)))
         onChange?()
     }
 

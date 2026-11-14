@@ -90,8 +90,19 @@ struct CommandRunnerTests {
     }
 
     @Test func missingExecutableFailsWithoutHanging() async {
+        for _ in 0..<5 {
+            await #expect(throws: POSIXError.self) {
+                try await CommandRunner.run(executable: "/nonexistent/burrow", arguments: [], timeout: 1)
+            }
+        }
+    }
+
+    @Test func spawnRejectsNulBytesAndInvalidEnvironmentKeys() async {
         await #expect(throws: POSIXError.self) {
-            try await CommandRunner.run(executable: "/nonexistent/burrow", arguments: [], timeout: 1)
+            try await CommandRunner.run(executable: "/bin/echo", arguments: ["a\0b"])
+        }
+        await #expect(throws: POSIXError.self) {
+            try await CommandRunner.run(executable: "/bin/echo", arguments: [], environment: ["BAD=KEY": "1"])
         }
     }
 }

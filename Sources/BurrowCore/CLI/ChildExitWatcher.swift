@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Collects a child that has exited, returning its status as a shell would report it: the exit
 /// code, or 128 plus the signal. Returns nil while it's still running.
@@ -22,7 +23,7 @@ final class ChildExitWatcher: @unchecked Sendable {
     private let source: DispatchSourceProcess
     private let queue: DispatchQueue
     private let check: @Sendable () -> Void
-    private var isStopped = false
+    private let isStopped = Mutex(false)
 
     /// `onEvent` runs when the system reports the exit, and `check` runs on the timer.
     init(pid: pid_t, queue: DispatchQueue, onEvent: @escaping @Sendable () -> Void, check: @escaping @Sendable () -> Void) {
@@ -35,15 +36,15 @@ final class ChildExitWatcher: @unchecked Sendable {
         scheduleCheck(after: 0.05)
     }
 
-    /// Call on the owner's queue once the child has been reaped.
+    /// Call once the child has been reaped.
     func stop() {
-        isStopped = true
+        isStopped.withLock { $0 = true }
         source.cancel()
     }
 
     private func scheduleCheck(after delay: TimeInterval) {
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, !isStopped else { return }
+            guard let self, !isStopped.withLock({ $0 }) else { return }
             check()
             scheduleCheck(after: min(delay * 2, 2))
         }

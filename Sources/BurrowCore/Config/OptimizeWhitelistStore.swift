@@ -2,6 +2,15 @@ import Foundation
 
 /// `~/.config/mole/whitelist_optimize`: optimize tasks the CLI should skip.
 public struct OptimizeWhitelistStore: Sendable {
+    public struct Snapshot: Sendable {
+        fileprivate let text: String?
+        fileprivate let legacyText: String?
+        public var actions: Set<String> {
+            guard let effective = text ?? legacyText else { return [] }
+            return Set(ConfigFile.parseList(effective))
+        }
+    }
+
     public struct Task: Identifiable, Sendable, Equatable {
         public let name: String
         public let action: String
@@ -21,30 +30,38 @@ public struct OptimizeWhitelistStore: Sendable {
     }
 
     public func load() throws -> Set<String> {
-        guard let text = try ConfigFile.read(fileURL) ?? ConfigFile.read(legacyURL) else { return [] }
-        return Set(ConfigFile.parseList(text))
+        try snapshot().actions
+    }
+
+    public func snapshot() throws -> Snapshot {
+        let text = try ConfigFile.read(fileURL)
+        let legacyText = text == nil ? try ConfigFile.read(legacyURL) : nil
+        return Snapshot(text: text, legacyText: legacyText)
     }
 
     public func save(_ actions: Set<String>) throws {
-        try save(actions, replacing: ConfigFile.read(fileURL))
+        try save(actions, replacing: snapshot())
     }
 
     public func setEnabled(_ enabled: Bool, action: String) throws -> Set<String> {
-        let current = try ConfigFile.read(fileURL)
-        let legacy = try current == nil ? ConfigFile.read(legacyURL) : nil
-        var actions = Set(ConfigFile.parseList(current ?? legacy ?? ""))
+        let current = try snapshot()
+        var actions = current.actions
         if enabled { actions.remove(action) }
         else { actions.insert(action) }
-        if current == nil, try ConfigFile.read(legacyURL) != legacy {
-            throw ConfigError.changed(legacyURL.lastPathComponent)
-        }
         try save(actions, replacing: current)
         return actions
     }
 
-    private func save(_ actions: Set<String>, replacing previous: String?) throws {
+    public func save(_ actions: Set<String>, replacing previous: Snapshot) throws {
+        if previous.text == nil, try ConfigFile.read(legacyURL) != previous.legacyText {
+            throw ConfigError.changed(legacyURL.lastPathComponent)
+        }
+        try ConfigFile.validateEntries(
+            actions,
+            message: "An optimization action can't start with # or contain control characters."
+        )
         let header = "# Mole Optimization Whitelist - These checks will be skipped during optimization"
-        try ConfigFile.write(([header] + actions.sorted()).joined(separator: "\n") + "\n", to: fileURL, replacing: previous)
+        try ConfigFile.write(([header] + actions.sorted()).joined(separator: "\n") + "\n", to: fileURL, replacing: previous.text)
     }
 
     /// Reads the task names and identifiers from the installed CLI's catalog.
@@ -58,7 +75,7 @@ public struct OptimizeWhitelistStore: Sendable {
 
     /// Parses `_optimize_catalog_register action handler "Health name" "Whitelist name" ...`.
     static func parseTasks(_ source: String) -> [Task] {
-        let pattern = /_optimize_catalog_register\s+(\w+)\s+\w+\s*\\\s*"[^"]*"\s+"([^"]*)"/
+        let pattern = /_optimize_catalog_register\s+(\w+)\s+\w+(?:\s*\\\s*|\s+)"[^"]*"\s+"([^"]*)"/
         return source.matches(of: pattern).map { Task(name: String($0.2), action: String($0.1)) }
     }
 }

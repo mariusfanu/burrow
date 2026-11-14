@@ -27,6 +27,8 @@ public struct TerminalScreen: Sendable {
     private var utf8Buffer: [UInt8] = []
     private var utf8Expected = 0
     private var pendingResponses: [UInt8] = []
+    private var csiParameters: [Int?] = []
+    private var styleBuffer: [Int] = []
 
     /// The terminal panel's colors, reported to programs that ask, as `rgb:rr/gg/bb` values.
     private static let reportedForeground = "f2f2/f2f2/f7f7"
@@ -247,12 +249,16 @@ public struct TerminalScreen: Sendable {
 
     /// Overwriting half of a wide glyph mustn't leave the other half behind.
     private mutating func clearWideGlyphsOverlapping(column: Int, width: Int) {
-        if column > 0, cells[cursorRow][column].isContinuation {
-            cells[cursorRow][column - 1] = blankCell()
+        clearWideGlyphsOverlapping(range: column..<min(column + width, columns))
+    }
+
+    private mutating func clearWideGlyphsOverlapping(range: Range<Int>) {
+        guard !range.isEmpty else { return }
+        if range.lowerBound > 0, cells[cursorRow][range.lowerBound].isContinuation {
+            cells[cursorRow][range.lowerBound - 1] = blankCell()
         }
-        let next = column + width
-        if next < columns, cells[cursorRow][next].isContinuation {
-            cells[cursorRow][next] = blankCell()
+        if range.upperBound < columns, cells[cursorRow][range.upperBound].isContinuation {
+            cells[cursorRow][range.upperBound] = blankCell()
         }
     }
 
@@ -331,18 +337,24 @@ public struct TerminalScreen: Sendable {
         // and acting on their parameters as if they were plain would do something else.
         let parameters = tokenizer.parameters
         guard !parameters.contains(where: { (0x20...0x2F).contains($0) }) else { return }
-        var text = String(decoding: parameters, as: UTF8.self)
-        let prefix = text.first.flatMap { "<=>?".contains($0) ? $0 : nil }
-        if prefix != nil { text.removeFirst() }
-        let isPrivate = prefix == "?"
+        var body = parameters[...]
+        let prefix: UInt8?
+        if let first = body.first,
+           first == UInt8(ascii: "<") || first == UInt8(ascii: "=") || first == UInt8(ascii: ">") || first == UInt8(ascii: "?") {
+            prefix = first
+            body = body.dropFirst()
+        } else {
+            prefix = nil
+        }
+        let isPrivate = prefix == UInt8(ascii: "?")
         switch prefix {
-        case "?":
+        case UInt8(ascii: "?"):
             // Xterm extensions share these final bytes. `ESC[?4m`, for one, isn't a style.
             guard [UInt8(ascii: "h"), UInt8(ascii: "l"), UInt8(ascii: "J"), UInt8(ascii: "K"), UInt8(ascii: "n")].contains(final) else { return }
-        case ">":
+        case UInt8(ascii: ">"):
             if final == UInt8(ascii: "c") { respond("\u{1B}[>0;0;0c") }
             return
-        case "<", "=":
+        case UInt8(ascii: "<"), UInt8(ascii: "="):
             return
         default:
             break
@@ -350,17 +362,15 @@ public struct TerminalScreen: Sendable {
         if final == UInt8(ascii: "m") {
             // Styles have their own grammar, so don't also parse them as cursor parameters.
             // An empty list here means nothing recognized, not a reset.
-            let codes = Self.styleCodes(text)
-            if !codes.isEmpty { applyStyle(codes) }
+            Self.parseStyleCodes(body, into: &styleBuffer)
+            if !styleBuffer.isEmpty { applyStyle(styleBuffer) }
             return
         }
         // Clamped because cursor arithmetic below would trap on a huge or negative value.
-        let values = text.split(separator: ";", omittingEmptySubsequences: false).map { field in
-            Int(field).map { min(max($0, 0), Self.maximumParameter) }
-        }
+        Self.parseCSIParameters(body, into: &csiParameters)
 
         func value(_ index: Int, default fallback: Int) -> Int {
-            guard index < values.count, let number = values[index] else { return fallback }
+            guard index < csiParameters.count, let number = csiParameters[index] else { return fallback }
             return number
         }
 
@@ -399,7 +409,9 @@ public struct TerminalScreen: Sendable {
             insertCharacters(count)
         case UInt8(ascii: "X"):
             let end = min(cursorColumn + count, columns)
-            for column in cursorColumn..<end { cells[cursorRow][column] = blankCell() }
+            let range = cursorColumn..<end
+            clearWideGlyphsOverlapping(range: range)
+            for column in range { cells[cursorRow][column] = blankCell() }
         case UInt8(ascii: "S"):
             removeLines(at: scrollTop, count: count)
         case UInt8(ascii: "T"):
@@ -426,9 +438,9 @@ public struct TerminalScreen: Sendable {
         case UInt8(ascii: "u"):
             moveCursor(row: savedCursor.row, column: savedCursor.column)
         case UInt8(ascii: "h") where isPrivate:
-            setPrivateMode(values.compactMap { $0 }, enabled: true)
+            setPrivateMode(csiParameters, enabled: true)
         case UInt8(ascii: "l") where isPrivate:
-            setPrivateMode(values.compactMap { $0 }, enabled: false)
+            setPrivateMode(csiParameters, enabled: false)
         default:
             break
         }
@@ -448,25 +460,74 @@ public struct TerminalScreen: Sendable {
         }
     }
 
+    private static func parseOptionalInt(_ bytes: ArraySlice<UInt8>) -> Int? {
+        guard !bytes.isEmpty else { return nil }
+        var result = 0
+        for byte in bytes {
+            guard byte >= UInt8(ascii: "0"), byte <= UInt8(ascii: "9") else { return nil }
+            let digit = Int(byte - UInt8(ascii: "0"))
+            if result <= maximumParameter {
+                result = min(result * 10 + digit, maximumParameter)
+            }
+        }
+        return result
+    }
+
+    private static func parseCSIParameters(_ bytes: ArraySlice<UInt8>, into output: inout [Int?]) {
+        output.removeAll(keepingCapacity: true)
+        var start = bytes.startIndex
+        while true {
+            let delimiter = bytes[start...].firstIndex(of: UInt8(ascii: ";")) ?? bytes.endIndex
+            output.append(parseOptionalInt(bytes[start..<delimiter]))
+            guard delimiter < bytes.endIndex else { break }
+            start = bytes.index(after: delimiter)
+        }
+    }
+
     /// SGR codes with colon forms such as `38:2::1:2:3` and `4:3` spelled the semicolon way.
     /// Read as plain numbers they'd count as 0, which resets the whole style.
-    private static func styleCodes(_ text: String) -> [Int?] {
-        text.split(separator: ";", omittingEmptySubsequences: false).flatMap { field -> [Int?] in
-            guard field.contains(":") else { return [Int(field).map { min(max($0, 0), maximumParameter) }] }
-            let parts = field.split(separator: ":", omittingEmptySubsequences: false).map { Int($0) }
-            switch (parts.first ?? nil, parts.count > 1 ? parts[1] : nil) {
-            case (38?, 5?), (48?, 5?):
-                return parts.count > 2 ? [parts[0], 5, parts[2]] : []
-            case (38?, 2?), (48?, 2?):
-                // The color-space field between the 2 and the components is optional.
-                return parts.count >= 5 ? [parts[0], 2] + parts.suffix(3) : []
-            case (4?, 0?):
-                return [24]
-            case (4?, _):
-                return [4]
-            default:
-                return []
+    private static func parseStyleCodes(_ bytes: ArraySlice<UInt8>, into output: inout [Int]) {
+        output.removeAll(keepingCapacity: true)
+        var start = bytes.startIndex
+        while true {
+            let delimiter = bytes[start...].firstIndex(of: UInt8(ascii: ";")) ?? bytes.endIndex
+            let field = bytes[start..<delimiter]
+            if !field.contains(UInt8(ascii: ":")) {
+                output.append(parseOptionalInt(field) ?? 0)
+            } else {
+                var parts: [Int?] = []
+                var partStart = field.startIndex
+                while true {
+                    let colon = field[partStart...].firstIndex(of: UInt8(ascii: ":")) ?? field.endIndex
+                    parts.append(parseOptionalInt(field[partStart..<colon]))
+                    guard colon < field.endIndex else { break }
+                    partStart = field.index(after: colon)
+                }
+                switch (parts.first ?? nil, parts.count > 1 ? parts[1] : nil) {
+                case (38?, 5?), (48?, 5?):
+                    if parts.count > 2 {
+                        output.append(parts[0] ?? 0)
+                        output.append(5)
+                        output.append(parts[2] ?? 0)
+                    }
+                case (38?, 2?), (48?, 2?):
+                    // The color-space field between the 2 and the components is optional.
+                    if parts.count >= 5 {
+                        output.append(parts[0] ?? 0)
+                        output.append(2)
+                        let tail = parts.suffix(3)
+                        for component in tail { output.append(component ?? 0) }
+                    }
+                case (4?, 0?):
+                    output.append(24)
+                case (4?, _):
+                    output.append(4)
+                default:
+                    break
+                }
             }
+            guard delimiter < bytes.endIndex else { break }
+            start = bytes.index(after: delimiter)
         }
     }
 
@@ -494,9 +555,13 @@ public struct TerminalScreen: Sendable {
         wrapPending = false
         switch mode {
         case 0:
-            for column in cursorColumn..<columns { cells[cursorRow][column] = blankCell() }
+            let range = cursorColumn..<columns
+            clearWideGlyphsOverlapping(range: range)
+            for column in range { cells[cursorRow][column] = blankCell() }
         case 1:
-            for column in 0...min(cursorColumn, columns - 1) { cells[cursorRow][column] = blankCell() }
+            let range = 0..<(min(cursorColumn, columns - 1) + 1)
+            clearWideGlyphsOverlapping(range: range)
+            for column in range { cells[cursorRow][column] = blankCell() }
         default:
             cells[cursorRow] = blankRow()
         }
@@ -504,18 +569,24 @@ public struct TerminalScreen: Sendable {
 
     private mutating func deleteCharacters(_ count: Int) {
         let amount = min(count, columns - cursorColumn)
+        clearWideGlyphsOverlapping(range: cursorColumn..<(cursorColumn + amount))
         cells[cursorRow].removeSubrange(cursorColumn..<(cursorColumn + amount))
         cells[cursorRow].append(contentsOf: Array(repeating: blankCell(), count: amount))
     }
 
     private mutating func insertCharacters(_ count: Int) {
         let amount = min(count, columns - cursorColumn)
+        if cursorColumn > 0, cells[cursorRow][cursorColumn].isContinuation {
+            cells[cursorRow][cursorColumn - 1] = blankCell()
+            cells[cursorRow][cursorColumn] = blankCell()
+        }
+        clearWideGlyphsOverlapping(range: (columns - amount)..<columns)
         cells[cursorRow].removeLast(amount)
         cells[cursorRow].insert(contentsOf: Array(repeating: blankCell(), count: amount), at: cursorColumn)
     }
 
-    private mutating func setPrivateMode(_ modes: [Int], enabled: Bool) {
-        for mode in modes {
+    private mutating func setPrivateMode(_ modes: [Int?], enabled: Bool) {
+        for case let mode? in modes {
             switch mode {
             case 25:
                 cursorVisible = enabled
@@ -542,9 +613,8 @@ public struct TerminalScreen: Sendable {
         }
     }
 
-    private mutating func applyStyle(_ values: [Int?]) {
+    private mutating func applyStyle(_ codes: [Int]) {
         var index = 0
-        let codes = values.map { $0 ?? 0 }
         while index < codes.count {
             let code = codes[index]
             switch code {

@@ -1,27 +1,35 @@
 import Darwin
 import Foundation
+import Synchronization
 
 /// Writes the same `operations.log` and `deletions.log` rows `cmd/analyze/oplog.go` writes,
 /// so `mo history` and support diagnostics see Trash moves made from this app.
-public final class OperationsLog: @unchecked Sendable {
+public final class OperationsLog: Sendable {
     private let operationsPath: String
     private let deletionsPath: String
     /// `MO_NO_OPLOG` silences operations.log only. deletions.log is always written,
     /// matching `cmd/analyze/oplog.go`.
     private let operationsEnabled: Bool
     private let commandField: String
-    private let lock = NSLock()
-    private var failed = false
+    private let failed = Mutex(false)
 
     /// True once any append has failed.
     public var writeFailed: Bool {
-        lock.withLock { failed }
+        failed.withLock { $0 }
     }
 
     public init(home: String, command: String, environment: [String: String]) {
         let logDirectory = home + "/Library/Logs/mole"
         operationsPath = logDirectory + "/operations.log"
-        deletionsPath = environment["MOLE_DELETE_LOG"] ?? (logDirectory + "/deletions.log")
+        if let customDeleteLog = environment["MOLE_DELETE_LOG"],
+           !customDeleteLog.isEmpty,
+           customDeleteLog.hasPrefix("/"),
+           !customDeleteLog.utf8.contains(0),
+           !customDeleteLog.split(separator: "/", omittingEmptySubsequences: false).contains("..") {
+            deletionsPath = customDeleteLog
+        } else {
+            deletionsPath = logDirectory + "/deletions.log"
+        }
         operationsEnabled = environment["MO_NO_OPLOG"] != "1"
 
         let stamp = Self.timestamp(format: "yyyyMMddHHmmss")
@@ -45,8 +53,13 @@ public final class OperationsLog: @unchecked Sendable {
     }
 
     public func recordFailed(path: String, size: Int64, reason: String) {
-        appendOperation(["[\(Self.timestamp())] [\(commandField)] FAILED \(Self.escape(path)) (\(reason))"])
+        appendOperation(["[\(Self.timestamp())] [\(commandField)] FAILED \(Self.escape(path)) (\(Self.escape(reason)))"])
         appendDeletion(path: path, size: size, status: "trash-failed")
+    }
+
+    /// Records a failed restore in `operations.log` without appending to `deletions.log`.
+    public func recordRestoreFailed(path: String, reason: String) {
+        appendOperation(["[\(Self.timestamp())] [\(commandField)] RESTORE_FAILED \(Self.escape(path)) (\(Self.escape(reason)))"])
     }
 
     private func appendDeletion(path: String, size: Int64, status: String) {
@@ -114,15 +127,19 @@ public final class OperationsLog: @unchecked Sendable {
         let text = lines.joined(separator: "\n") + "\n"
         do {
             let directory = URL(fileURLWithPath: path).deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let descriptor = open(path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+            let descriptor = open(path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
             guard descriptor >= 0 else { throw POSIXError(.EIO) }
             defer { close(descriptor) }
             let bytes = Array(text.utf8)
             let written = bytes.withUnsafeBytes { write(descriptor, $0.baseAddress, $0.count) }
             guard written == bytes.count else { throw POSIXError(.EIO) }
         } catch {
-            lock.withLock { failed = true }
+            failed.withLock { $0 = true }
         }
     }
 }

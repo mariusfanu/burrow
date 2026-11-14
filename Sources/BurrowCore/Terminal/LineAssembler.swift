@@ -9,9 +9,12 @@ public struct LineAssembler: Sendable {
     private var tokenizer = EscapeTokenizer()
     private var pending: [UInt8] = []
     private var cursorResetPending = false
+    private let maximumPendingBytes: Int
     private(set) public var inAlternateScreen = false
 
-    public init() {}
+    public init(maximumPendingBytes: Int = 4 * 1024 * 1024) {
+        self.maximumPendingBytes = max(maximumPendingBytes, 1)
+    }
 
     /// The text on the unfinished line.
     public var partial: String {
@@ -65,6 +68,7 @@ public struct LineAssembler: Sendable {
             pending.removeAll(keepingCapacity: true)
             cursorResetPending = false
         }
+        guard pending.count < maximumPendingBytes else { return }
         pending.append(byte)
     }
 

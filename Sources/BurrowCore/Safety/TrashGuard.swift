@@ -113,7 +113,7 @@ public struct TrashGuard: Sendable {
             if isCriticalPath(cleanPath) { return true }
 
             for home in homeRoots {
-                if cleanPath == home || isSameExistingPath(cleanPath, home) { return true }
+                if cleanPath.lowercased() == home.lowercased() || isSameExistingPath(cleanPath, home) { return true }
 
                 let dockerState = home + "/Library/Containers/com.docker.docker"
                 if touchesRuntimeRoot(cleanPath, dockerState) { return true }
@@ -141,18 +141,21 @@ public struct TrashGuard: Sendable {
         }
 
         private mutating func touchesRuntimeRoot(_ path: String, _ root: String) -> Bool {
-            path == root || path.hasPrefix(root + "/")
+            let lowerPath = path.lowercased()
+            let lowerRoot = root.lowercased()
+            return lowerPath == lowerRoot || lowerPath.hasPrefix(lowerRoot + "/")
                 || isPathWithinExistingRoot(path, root)
                 || containsProtectedRoot(path, root)
         }
 
         private mutating func isCriticalPath(_ path: String) -> Bool {
+            let lowerPath = path.lowercased()
             for root in TrashGuard.criticalRoots {
-                if path == root || isSameExistingPath(path, root) { return true }
+                if lowerPath == root.lowercased() || isSameExistingPath(path, root) { return true }
             }
             if isDirectChildOfExistingRoot(path, "/Users") { return true }
             for root in TrashGuard.protectedTrees {
-                if path.hasPrefix(root + "/") || isPathWithinExistingRoot(path, root) { return true }
+                if lowerPath.hasPrefix(root.lowercased() + "/") || isPathWithinExistingRoot(path, root) { return true }
             }
             return false
         }
@@ -295,10 +298,21 @@ public struct TrashGuard: Sendable {
     }
 
     private static func clean(_ path: String) -> String {
-        let standardized = (path as NSString).standardizingPath
-        // standardizingPath strips /private from some paths, which the guard must see.
-        if path.hasPrefix("/private/") { return trimTrailingSlash(path) }
-        return trimTrailingSlash(standardized)
+        guard path.hasPrefix("/") else {
+            return trimTrailingSlash((path as NSString).standardizingPath)
+        }
+        // Collapse "//", ".", and ".." lexically while preserving "/private/",
+        // which NSString.standardizingPath strips from /private/var, /private/etc, etc.
+        var components: [Substring] = []
+        for part in path.split(separator: "/", omittingEmptySubsequences: true) {
+            if part == "." { continue }
+            if part == ".." {
+                if !components.isEmpty { components.removeLast() }
+            } else {
+                components.append(part)
+            }
+        }
+        return "/" + components.joined(separator: "/")
     }
 
     private static func trimTrailingSlash(_ path: String) -> String {

@@ -54,4 +54,14 @@ enum ConfigFile {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && !$0.hasPrefix("#") }
     }
+
+    /// Rejects entries that start with `#` or contain control characters such as newlines.
+    static func validateEntries<S: Sequence>(_ entries: S, message: String) throws where S.Element == String {
+        if entries.contains(where: {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("#")
+                || $0.unicodeScalars.contains { $0.properties.generalCategory == .control }
+        }) {
+            throw ConfigError.invalidPattern(message)
+        }
+    }
 }

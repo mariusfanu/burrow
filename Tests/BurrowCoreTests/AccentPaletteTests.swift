@@ -52,4 +52,13 @@ import Testing
             #expect(AccentPalette.hex(from: AccentPalette.hsb(from: color)) == color)
         }
     }
+
+    @Test func negativeRankDoesNotTrap() {
+        for rank in [-1, -8, -9, Int.min] {
+            let tile = AccentPalette.tile(rank: rank, accent: 0x007AFF)
+            let shade = AccentPalette.shade(rank: rank, parent: tile)
+            #expect(AccentPalette.contrast(0xFFFFFF, tile) >= AccentPalette.minimumContrast)
+            #expect(AccentPalette.contrast(0xFFFFFF, shade) >= AccentPalette.minimumContrast)
+        }
+    }
 }

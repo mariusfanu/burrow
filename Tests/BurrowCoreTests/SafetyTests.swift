@@ -98,6 +98,37 @@ import Testing
         try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: "/System/Library")
         #expect(throws: TrashGuard.Refusal.self) { try TrashGuard(home: home).validate(link) }
     }
+
+    @Test(arguments: [
+        "/private//etc/passwd",
+        "/private/./etc/passwd",
+        "//private/var/db/nonexistent",
+        "/private//var/folders/xx/yy/T/com.crowdstrike.agent",
+    ])
+    func privatePathsAreStandardizedWithoutDroppingPrivatePrefix(path: String) throws {
+        let guardrail = TrashGuard(home: try makeHome())
+        #expect(guardrail.isProtected(path))
+        #expect(throws: TrashGuard.Refusal.self) { try guardrail.validate(path) }
+    }
+
+    @Test func privateDotDotPathIsProtected() throws {
+        let guardrail = TrashGuard(home: try makeHome())
+        #expect(guardrail.isProtected("/private/tmp/../etc/passwd"))
+    }
+
+    @Test func caseInsensitiveNonExistentProtectedPathsAreRefused() throws {
+        let home = try makeHome()
+        let guardrail = TrashGuard(home: home)
+        for path in [
+            "/system/nonexistent",
+            "/private/var/db/nonexistent",
+            home.uppercased() + "/.orbstack/nonexistent",
+            home.uppercased() + "/Library/Containers/com.docker.docker/nonexistent",
+        ] {
+            #expect(guardrail.isProtected(path))
+            #expect(throws: TrashGuard.Refusal.self) { try guardrail.validate(path) }
+        }
+    }
 }
 
 @Suite struct OperationsLogTests {
@@ -158,13 +189,13 @@ import Testing
         let log = OperationsLog(home: home, command: "analyze", environment: [:])
         log.begin()
         log.recordTrashed(path: "/tmp/x\ny", size: 2_000)
-        log.recordFailed(path: "/System", size: 0, reason: "protected")
+        log.recordFailed(path: "/System", size: 0, reason: "protected\nFORGED")
         log.end(items: 1, bytes: 2_000)
 
         let operations = try String(contentsOfFile: home + "/Library/Logs/mole/operations.log", encoding: .utf8)
         #expect(operations.contains("# ========== analyze run="))
         #expect(operations.contains("TRASHED /tmp/x\\ny (2KB)"))
-        #expect(operations.contains("FAILED /System (protected)"))
+        #expect(operations.contains("FAILED /System (protected\\nFORGED)"))
         #expect(operations.contains("session ended at"))
         #expect(operations.contains("1 items, 2KB =========="))
 
@@ -174,6 +205,22 @@ import Testing
         #expect(row[1] == "trash")
         #expect(row[2] == "2")
         #expect(row[3] == "ok")
+    }
+
+    @Test func operationsLogRefusesSymlinkAndValidatesCustomDeleteLogPath() throws {
+        let home = TestScratch.root + "burrow-log-sec-" + UUID().uuidString
+        let logDir = home + "/Library/Logs/mole"
+        let victim = home + "/victim.txt"
+        try FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
+        try "keep".write(toFile: victim, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(atPath: logDir + "/operations.log", withDestinationPath: victim)
+
+        let log = OperationsLog(home: home, command: "analyze", environment: ["MOLE_DELETE_LOG": "relative/../bad"])
+        log.begin()
+        log.recordTrashed(path: "/tmp/a", size: 100)
+        #expect(log.writeFailed)
+        #expect(try String(contentsOfFile: victim, encoding: .utf8) == "keep")
+        #expect(FileManager.default.fileExists(atPath: logDir + "/deletions.log"))
     }
 
     @Test func theOptOutSilencesOperationsButNotDeletions() {
@@ -268,6 +315,64 @@ import Testing
         #expect(report.outcomes.first?.status == .alreadyMissing)
         #expect(!log.contains("gone.bin"))
     }
+
+    @Test func restoreFailureDoesNotWriteTrashFailedToDeletionsLog() throws {
+        let home = TestScratch.root + "burrow-restore-log-" + UUID().uuidString
+        let trashDir = home + "/.Trash"
+        try FileManager.default.createDirectory(atPath: trashDir, withIntermediateDirectories: true)
+        let stored = URL(fileURLWithPath: trashDir + "/item.bin")
+        try Data([1]).write(to: stored)
+
+        let item = TrashMover.TrashedItem(trashedURL: stored, originalPath: home + "/Downloads/item.bin")
+        let report = TrashMover.restore([item], home: home, environment: [:])
+        #expect(report.outcomes.first?.error != nil)
+        let opLog = try String(contentsOfFile: home + "/Library/Logs/mole/operations.log", encoding: .utf8)
+        #expect(opLog.contains("RESTORE_FAILED"))
+        #expect(!FileManager.default.fileExists(atPath: home + "/Library/Logs/mole/deletions.log"))
+    }
+
+    @Test func cancelledTrashTaskStopsWithoutLoggingFailure() async throws {
+        let home = TestScratch.root + "burrow-cancel-trash-" + UUID().uuidString
+        let downloads = home + "/Downloads"
+        try FileManager.default.createDirectory(atPath: downloads, withIntermediateDirectories: true)
+        let file = downloads + "/keep.bin"
+        try Data([1, 2, 3]).write(to: URL(fileURLWithPath: file))
+
+        let task = Task {
+            await withTaskCancellationHandler {
+                while !Task.isCancelled { await Task.yield() }
+                return await TrashMover.trash(
+                    entries: [(path: file, size: 3)],
+                    guardrail: TrashGuard(home: home),
+                    home: home,
+                    environment: [:]
+                )
+            } onCancel: {}
+        }
+        task.cancel()
+        let report = await task.value
+        #expect(report.outcomes.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: file))
+        let opLog = try String(contentsOfFile: home + "/Library/Logs/mole/operations.log", encoding: .utf8)
+        #expect(!opLog.contains("trash-failed"))
+    }
+
+    @Test func trashRefusalLogsProtectedAndContinuesToNextEntry() async throws {
+        let home = TestScratch.root + "burrow-refusal-" + UUID().uuidString
+        let protectedPath = "/System"
+        let missingPath = home + "/Downloads/absent.bin"
+        let report = await TrashMover.trash(
+            entries: [(path: protectedPath, size: 10), (path: missingPath, size: 5)],
+            guardrail: TrashGuard(home: home),
+            home: home,
+            environment: [:]
+        )
+        #expect(report.outcomes.count == 2)
+        #expect(report.outcomes[0].error != nil)
+        #expect(report.outcomes[1].status == .alreadyMissing)
+        let opLog = try String(contentsOfFile: home + "/Library/Logs/mole/operations.log", encoding: .utf8)
+        #expect(opLog.contains("FAILED /System (protected)"))
+    }
 }
 
 @Suite struct ConfigTests {
@@ -292,6 +397,23 @@ import Testing
         try store.save(["~/external"])
         #expect(throws: ConfigError.changed("purge_paths")) { try store.save(["~/draft"], replacing: original) }
         #expect(try store.load() == ["~/external"])
+    }
+
+    @Test func whitelistRejectsConcurrentEditsAndEdgeCasePatterns() throws {
+        let home = try makeConfigHome()
+        try "/tmp/seed\n".write(toFile: home + "/.config/mole/whitelist", atomically: true, encoding: .utf8)
+        let store = WhitelistStore(home: home, cliRoot: nil)
+        try store.save(["/tmp/one"])
+        let original = try store.snapshot()
+        try store.save(["/tmp/external"])
+        #expect(throws: ConfigError.changed("whitelist")) { try store.save(["/tmp/draft"], replacing: original) }
+        #expect(try store.load() == ["/tmp/external"])
+
+        #expect(WhitelistStore.problem(with: "/System ", home: home) != nil)
+        #expect(WhitelistStore.problem(with: "~otheruser/foo", home: home) != nil)
+        #expect(WhitelistStore.problem(with: "~/foo", home: home) == nil)
+        #expect(WhitelistStore.problem(with: "~", home: home) == nil)
+        #expect(throws: ConfigError.self) { try store.add("/System ") }
     }
 
     private let baseScript = #"""
@@ -467,10 +589,59 @@ import Testing
         _optimize_catalog_register sqlite_vacuum opt_sqlite_vacuum \
             "Database Optimization" "Database Optimization" \
             "Compress" true
+        _optimize_catalog_register dns_flush opt_dns_flush "DNS Cache Flush" "DNS Flush" "Flush DNS" true
         """#
         let tasks = OptimizeWhitelistStore.parseTasks(source)
-        #expect(tasks.map(\.action) == ["cache_refresh", "sqlite_vacuum"])
-        #expect(tasks.first?.name == "Finder Refresh")
+        #expect(tasks.map(\.action) == ["cache_refresh", "sqlite_vacuum", "dns_flush"])
+        #expect(tasks.map(\.name) == ["Finder Refresh", "Database Optimization", "DNS Flush"])
+    }
+
+    @Test func storesRejectNewlineAndControlCharacterInjection() throws {
+        let home = try makeConfigHome()
+        try "/tmp/seed\n".write(toFile: home + "/.config/mole/whitelist", atomically: true, encoding: .utf8)
+
+        let whitelist = WhitelistStore(home: home, cliRoot: nil)
+        #expect(throws: ConfigError.self) { try whitelist.save(["/tmp/ok\n/evil"]) }
+
+        let purge = PurgePathsStore(home: home)
+        #expect(throws: ConfigError.self) { try purge.save(["~/ok\r\n/evil"]) }
+
+        let optimize = OptimizeWhitelistStore(home: home, cliRoot: nil)
+        #expect(throws: ConfigError.self) { try optimize.save(["action\n#comment"]) }
+    }
+
+    @Test func storesRejectHashPrefixedEntriesAndWhitelistTrimsTrailingSlashFromHome() throws {
+        let home = try makeConfigHome()
+
+        let whitelist = WhitelistStore(home: home, cliRoot: nil)
+        #expect(throws: ConfigError.self) { try whitelist.save(["#comment"]) }
+
+        let purge = PurgePathsStore(home: home)
+        #expect(throws: ConfigError.self) { try purge.save(["  #comment"]) }
+
+        let optimize = OptimizeWhitelistStore(home: home, cliRoot: nil)
+        #expect(throws: ConfigError.self) { try optimize.save(["#comment"]) }
+
+        #expect(WhitelistStore.problem(with: "~/foo", home: "/Users/a/") == nil)
+    }
+
+    @Test func optimizeWhitelistSnapshotDetectsConcurrentChangesAndReadsCatalog() throws {
+        let home = try makeConfigHome()
+        let cliRoot = TestScratch.root + "burrow-cli-" + UUID().uuidString
+        let catalogDir = cliRoot + "/lib/optimize"
+        try FileManager.default.createDirectory(atPath: catalogDir, withIntermediateDirectories: true)
+        try #"""
+        _optimize_catalog_register dns_flush opt_dns_flush "DNS Cache Flush" "DNS Flush" "Flush DNS" true
+        """#.write(toFile: catalogDir + "/catalog.sh", atomically: true, encoding: .utf8)
+
+        let store = OptimizeWhitelistStore(home: home, cliRoot: cliRoot)
+        #expect(store.availableTasks() == [OptimizeWhitelistStore.Task(name: "DNS Flush", action: "dns_flush")])
+
+        let before = try store.snapshot()
+        try store.save(["dns_flush"], replacing: before)
+        #expect(throws: ConfigError.changed("whitelist_optimize")) {
+            try store.save(["other"], replacing: before)
+        }
     }
 }
 
@@ -494,6 +665,8 @@ import Testing
         ("/USERS/ME/DOCUMENTS", true, .topLevelFolder),
         ("/Applications/Utilities", true, .outsideHome),
         ("/Applications/Utilities/Terminal.app", true, .outsideHome),
+        ("/Applications/Sub/Foo.app", true, .outsideHome),
+        ("/Users/me", true, .outsideHome),
         ("/Library/LaunchDaemons", true, .outsideHome),
         ("/opt/homebrew/bin", true, .outsideHome),
         ("/Users/Shared/data", true, .outsideHome),
@@ -517,6 +690,12 @@ import Testing
     ])
     func ordinary(path: String, isDirectory: Bool) {
         #expect(risk.reason(forPath: path, isDirectory: isDirectory) == nil)
+    }
+
+    @Test func symlinkInsideTmpPointingToEtcIsNotElevatedByRisk() throws {
+        let link = TestScratch.root + "burrow-risk-etc-" + UUID().uuidString
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: "/etc")
+        #expect(risk.reason(forPath: link, isDirectory: false) == nil)
     }
 
     @Test func aLinkedParentCantHideASensitivePlace() throws {

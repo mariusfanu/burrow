@@ -112,7 +112,11 @@ public struct StatusSnapshot: Decodable, Sendable, Equatable {
     public var zombieCount: Int?
 
     public static func decode(_ data: Data) throws -> StatusSnapshot {
-        try JSONDecoder.forCLI().decode(StatusSnapshot.self, from: data)
+        try decode(data, using: JSONDecoder.forCLI())
+    }
+
+    static func decode(_ data: Data, using decoder: JSONDecoder) throws -> StatusSnapshot {
+        try decoder.decode(StatusSnapshot.self, from: data)
     }
 
     var containsReadings: Bool {

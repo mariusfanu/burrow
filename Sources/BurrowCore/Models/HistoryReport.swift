@@ -35,7 +35,7 @@ public struct HistoryReport: Decodable, Sendable, Equatable {
 
         public var commandName: String {
             guard let command else { return "unknown" }
-            return command.replacing("-dry-run", with: "")
+            return command.hasSuffix("-dry-run") ? String(command.dropLast("-dry-run".count)) : command
         }
     }
 

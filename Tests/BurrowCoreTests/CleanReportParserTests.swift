@@ -62,4 +62,18 @@ struct CleanReportParserTests {
         #expect(report.sections[0].bytes == 3_000_000)
         #expect(report.potentialBytes == 3_000_000)
     }
+
+    @Test func parsePathListHandlesCRLFLineEndings() {
+        let list = "=== Caches ===\r\n/tmp/a  # 1MB\r\n/tmp/b  # 2MB\r\n"
+        let parsed = CleanReport.parsePathList(list)
+        #expect(parsed["Caches"]?.map(\.path) == ["/tmp/b", "/tmp/a"])
+    }
+
+    @Test func parsePathListHandlesCommentMarkerInPathAndPreambleRows() {
+        let list = "/tmp/orphan  # 5MB\n=== Caches ===\n/tmp/dir  # name  # 2MB\n"
+        let parsed = CleanReport.parsePathList(list)
+        #expect(parsed.keys.sorted() == ["Caches"])
+        #expect(parsed["Caches"]?.map(\.path) == ["/tmp/dir  # name"])
+        #expect(parsed["Caches"]?.first?.bytes == 2_000_000)
+    }
 }

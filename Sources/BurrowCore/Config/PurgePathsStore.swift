@@ -26,6 +26,10 @@ public struct PurgePathsStore: Sendable {
     }
 
     public func save(_ paths: [String], replacing previous: Snapshot) throws {
+        try ConfigFile.validateEntries(
+            paths,
+            message: "A purge path can't start with # or contain control characters."
+        )
         let header = """
         # Mole Purge Paths - Auto-discovered project directories
         # Edit this file to customize, or run: mo purge --paths

@@ -14,9 +14,12 @@ public enum Treemap {
         items: [(id: ID, size: Double)],
         in bounds: CGRect
     ) -> [Tile<ID>] {
-        let sorted = items.filter { $0.size > 0 }.sorted { $0.size > $1.size }
+        guard !bounds.isNull, !bounds.isEmpty,
+              bounds.size.width.isFinite, bounds.size.height.isFinite,
+              bounds.size.width > 0, bounds.size.height > 0 else { return [] }
+        let sorted = items.filter { $0.size.isFinite && $0.size > 0 }.sorted { $0.size > $1.size }
         let total = sorted.reduce(0) { $0 + $1.size }
-        guard total > 0, bounds.width > 0, bounds.height > 0 else { return [] }
+        guard total.isFinite, total > 0 else { return [] }
 
         let scale = Double(bounds.width * bounds.height) / total
         let scaled = sorted.map { (id: $0.id, area: $0.size * scale) }

@@ -13,6 +13,8 @@ public struct TouchIDStatus: Sendable, Equatable {
         } else {
             description = text
         }
-        isEnabled = !text.lowercased().contains("not ")
+        let lower = text.lowercased()
+        let hasNegative = lower.contains("not ") || lower.contains("disabled") || lower.contains("unavailable")
+        isEnabled = !hasNegative && (lower.contains("enabled") || lower.contains("configured"))
     }
 }

@@ -19,7 +19,7 @@ public struct MenuItem: Identifiable, Sendable, Equatable, Hashable {
     public static func parse(row: MenuRow, index: Int) -> MenuItem {
         // Rows are `name  size | tag | age`, with an optional tree glyph in front.
         var text = row.text
-        for glyph in ["┌", "├", "└", "─"] where text.hasPrefix(glyph) {
+        while let first = text.first, "┌├└─".contains(first) {
             text = String(text.dropFirst()).trimmingCharacters(in: .whitespaces)
         }
         let fields = text.components(separatedBy: " | ").map { $0.trimmingCharacters(in: .whitespaces) }

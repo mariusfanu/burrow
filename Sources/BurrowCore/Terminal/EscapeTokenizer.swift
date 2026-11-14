@@ -69,7 +69,7 @@ struct EscapeTokenizer: Sendable {
             }
             if byte == 0x1B {
                 state = .escape
-            } else {
+            } else if parameters.count < 256 {
                 parameters.append(byte)
             }
             return nil

@@ -129,7 +129,7 @@ public enum TrashMover {
                 audit.recordRestored(path: item.originalPath)
                 outcomes.append(Outcome(path: item.originalPath, error: nil))
             } catch {
-                audit.recordFailed(path: item.originalPath, size: 0, reason: "restore-failed")
+                audit.recordRestoreFailed(path: item.originalPath, reason: "restore-failed")
                 outcomes.append(Outcome(path: item.originalPath, error: error.localizedDescription))
             }
         }
@@ -151,6 +151,7 @@ public enum TrashMover {
         var trashedBytes: Int64 = 0
 
         for entry in entries {
+            if Task.isCancelled { break }
             do {
                 try guardrail.validate(entry.path)
                 // A path that's already gone is not logged, because nothing was done to it.
@@ -171,6 +172,8 @@ public enum TrashMover {
                     trashedURL: identity == nil ? nil : trashedURL,
                     trashedIdentity: identity
                 ))
+            } catch is CancellationError {
+                break
             } catch let refusal as TrashGuard.Refusal {
                 audit.recordFailed(path: entry.path, size: entry.size, reason: "protected")
                 outcomes.append(Outcome(path: entry.path, error: refusal.localizedDescription))

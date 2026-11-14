@@ -22,7 +22,8 @@ public enum AccentPalette {
             (0, 1, 0.82), (0.07, 0.95, 0.74), (-0.06, 1, 0.70), (0.13, 0.9, 0.66),
             (-0.11, 0.95, 0.62), (0.035, 0.85, 0.58), (-0.035, 0.85, 0.54), (0.1, 0.8, 0.5),
         ]
-        let step = steps[rank % steps.count]
+        let index = ((rank % steps.count) + steps.count) % steps.count
+        let step = steps[index]
         return legible(HSB(
             hue: base.hue + step.hue * saturationWeight(base),
             saturation: min(base.saturation * step.saturation, 1),
@@ -38,7 +39,8 @@ public enum AccentPalette {
             (0, 1), (0.018, 0.88), (-0.018, 1.08), (0.03, 0.78),
             (-0.03, 0.94), (0.01, 0.7), (-0.01, 0.84), (0.024, 0.64),
         ]
-        let step = steps[rank % steps.count]
+        let index = ((rank % steps.count) + steps.count) % steps.count
+        let step = steps[index]
         return legible(HSB(
             hue: base.hue + step.hue * saturationWeight(base),
             saturation: base.saturation,

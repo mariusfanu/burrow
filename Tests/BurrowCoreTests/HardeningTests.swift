@@ -78,6 +78,8 @@ struct CLICompatibilityTests {
         ("1.70.0", .newer),
         ("2.0", .newer),
         ("1.68.9", .older),
+        ("-1.0.0", .unknown),
+        ("+1.0.0", .unknown),
         ("nightly-abc", .unknown),
         ("", .unknown),
     ])
@@ -137,6 +139,84 @@ struct CLITrustTests {
         for writable in [NSHomeDirectory() + "/.local/bin", "/opt/homebrew/bin", "/evil/bin"] {
             #expect(try #require(parts.firstIndex(of: writable)) > sudoDirectory)
         }
+    }
+
+    @Test func resolveRootFindsHomebrewLayoutsAndWrapperTargets() throws {
+        let fileManager = FileManager.default
+        for subdir in ["libexec", "lib/mole", "share/mole"] {
+            let prefix = URL(fileURLWithPath: TestScratch.root).appendingPathComponent("burrow-root-" + UUID().uuidString)
+            let binDir = prefix.appendingPathComponent("bin")
+            let exec = binDir.appendingPathComponent("mo")
+            let libDir = prefix.appendingPathComponent(subdir).appendingPathComponent("lib/core")
+            try fileManager.createDirectory(at: binDir, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: libDir, withIntermediateDirectories: true)
+            try "#!/bin/sh\n".write(to: exec, atomically: true, encoding: .utf8)
+            try "".write(to: libDir.appendingPathComponent("base.sh"), atomically: true, encoding: .utf8)
+            #expect(CLILocator.resolveRoot(of: exec.path) == prefix.appendingPathComponent(subdir).path)
+        }
+
+        // Wrapper script fallback pointing to an external mole tree.
+        let wrapperRoot = URL(fileURLWithPath: TestScratch.root).appendingPathComponent("burrow-wrap-" + UUID().uuidString)
+        let targetTree = wrapperRoot.appendingPathComponent("opt/mole-tree")
+        let targetLib = targetTree.appendingPathComponent("lib/core")
+        let wrapperBin = wrapperRoot.appendingPathComponent("bin/mo")
+        try fileManager.createDirectory(at: targetLib, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: wrapperBin.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "".write(to: targetLib.appendingPathComponent("base.sh"), atomically: true, encoding: .utf8)
+        try "#!/bin/sh\nexec \"\(targetTree.path)/mole\" \"$@\"\n".write(to: wrapperBin, atomically: true, encoding: .utf8)
+        #expect(CLILocator.resolveRoot(of: wrapperBin.path) == targetTree.path)
+    }
+
+    @Test func environmentStripsDangerousShellAndLoaderVariablesAndRelativePathEntries() throws {
+        let env = CLILocator.environment(base: [
+            "PATH": "relative/bin:.:/custom/bin",
+            "BASH_ENV": "/evil.sh",
+            "ENV": "/evil.sh",
+            "SHELLOPTS": "xtrace",
+            "BASHOPTS": "extdebug",
+            "CDPATH": "/tmp",
+            "IFS": "/",
+            "SUDO_ASKPASS": "/evil/askpass",
+            "DYLD_INSERT_LIBRARIES": "/evil.dylib",
+            "BASH_FUNC_ls%%": "() { evil; }",
+            "HOME": "/Users/alice",
+        ])
+        for blocked in ["BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "CDPATH", "IFS", "SUDO_ASKPASS", "DYLD_INSERT_LIBRARIES", "BASH_FUNC_ls%%"] {
+            #expect(env[blocked] == nil)
+        }
+        #expect(env["HOME"] == "/Users/alice")
+        let pathParts = try #require(env["PATH"]).split(separator: ":").map(String.init)
+        #expect(!pathParts.contains("relative/bin"))
+        #expect(!pathParts.contains("."))
+        #expect(pathParts.contains("/custom/bin"))
+    }
+
+    @Test func worldWritableStickyDirectoriesAreRejected() throws {
+        let fileManager = FileManager.default
+        let dir = URL(fileURLWithPath: TestScratch.root).appendingPathComponent("burrow-sticky-" + UUID().uuidString)
+        let exec = dir.appendingPathComponent("mo")
+        try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        try "#!/bin/sh\n".write(to: exec, atomically: true, encoding: .utf8)
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: exec.path)
+        try fileManager.setAttributes([.posixPermissions: 0o1777], ofItemAtPath: dir.path)
+        #expect(!CLILocator.isSafeDirectory(dir.path))
+        #expect(!CLILocator.isSafeToRun(exec.path))
+        #expect(!CLILocator.isSafeDirectory("/tmp"))
+    }
+
+    @Test func symlinkTargetingRootAndMissingBaseScriptFallback() throws {
+        let fileManager = FileManager.default
+        let dir = URL(fileURLWithPath: TestScratch.root).appendingPathComponent("burrow-rootlink-" + UUID().uuidString)
+        let binDir = dir.appendingPathComponent("bin")
+        try fileManager.createDirectory(at: binDir, withIntermediateDirectories: true)
+
+        let rootLink = binDir.appendingPathComponent("to-root")
+        try fileManager.createSymbolicLink(atPath: rootLink.path, withDestinationPath: "/")
+        #expect(!CLILocator.isSafeToRun(rootLink.path))
+
+        let plainExec = binDir.appendingPathComponent("mo")
+        try "#!/bin/sh\necho hi\n".write(to: plainExec, atomically: true, encoding: .utf8)
+        #expect(CLILocator.resolveRoot(of: plainExec.path) == binDir.path)
     }
 }
 
@@ -308,6 +388,39 @@ struct CLITerminalTests {
         #expect(lines().contains("got 1;1"))
         #expect(!lines().contains("TIMEOUT"))
     }
+
+    @Test func outOfRangeDimensionsClampInsteadOfTrapping() async throws {
+        let terminal = try CLITerminal(
+            executable: "/usr/bin/true",
+            arguments: [],
+            environment: CLILocator.environment(),
+            rows: 0,
+            columns: -5
+        )
+        #expect(terminal.screen.rows == 1)
+        #expect(terminal.screen.columns == 1)
+        terminal.resize(rows: 0, columns: 100_000)
+        #expect(terminal.screen.rows == 1)
+        #expect(terminal.screen.columns == 100_000)
+        _ = await terminal.waitForExit()
+    }
+
+    @Test func resizeUpdatesPTYWindowSizeAndDeliversSIGWINCH() async throws {
+        let (terminal, lines) = try await run("""
+        trap 'stty size; exit 0' WINCH
+        echo READY
+        while :; do sleep 0.05; done
+        """)
+        defer { terminal.cancel() }
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !lines().contains("READY"), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(lines().contains("READY"))
+        terminal.resize(rows: 30, columns: 90)
+        try await finish(terminal)
+        #expect(lines().contains("30 90"))
+    }
 }
 
 @Suite(.timeLimit(.minutes(1)))
@@ -439,5 +552,22 @@ struct EntryMapTests {
         let second = try #require(drawn.tiles.first { $0.id == "/e3" }?.rect)
         #expect(abs(first.minX * 800 - second.minX) < 0.001)
         #expect(abs(first.width * 800 - second.width) < 0.001)
+    }
+
+    @Test func normalizedHandlesZeroBoundsAndZeroSizeRestEntries() {
+        #expect(EntryMap.normalized(CGRect(x: 1, y: 1, width: 10, height: 10), in: CGSize(width: 0, height: 10)) == nil)
+        #expect(EntryMap.normalized(CGRect(x: 1, y: 1, width: 10, height: 10), in: CGSize(width: 10, height: 0)) == nil)
+        #expect(
+            EntryMap.normalized(CGRect(x: 25, y: 50, width: 50, height: 25), in: CGSize(width: 100, height: 100))
+                == CGRect(x: 0.25, y: 0.5, width: 0.5, height: 0.25)
+        )
+
+        let zeroRestEntries = (0..<35).map { index in
+            AnalyzeResult.Entry(name: "e\(index)", path: "/e\(index)", size: index < 32 ? 100 : 0, isDir: false)
+        }
+        let map = EntryMap(entries: zeroRestEntries, in: CGRect(x: 0, y: 0, width: 100, height: 100))
+        #expect(map.restCount == 3)
+        #expect(map.restSize == 0)
+        #expect(!map.tiles.contains { $0.id == EntryMap.restID })
     }
 }

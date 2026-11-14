@@ -12,7 +12,7 @@ public extension Sequence<Int64> {
 
 public enum SizeText {
     // A regex literal inside a function is compiled again on every call. This runs per line.
-    nonisolated(unsafe) private static let size = /(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB)\b/
+    nonisolated(unsafe) private static let size = /\b(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB)\b/
 
     /// Parses a size such as `93.6MB`, `7.07GB+` or `786KB`, using the CLI's decimal units.
     public static func bytes(from text: String) -> Int64? {

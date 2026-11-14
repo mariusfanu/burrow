@@ -63,7 +63,7 @@ public struct CleanReport: Sendable, Equatable {
     public static func parsePathList(_ text: String) -> [String: [PathEntry]] {
         var result: [String: [PathEntry]] = [:]
         var section: String?
-        for line in text.split(separator: "\n") {
+        for line in text.split(whereSeparator: \.isNewline) {
             if let heading = line.firstMatch(of: pathListHeading) {
                 section = String(heading.1)
                 continue

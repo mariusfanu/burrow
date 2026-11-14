@@ -7,6 +7,7 @@ public final class NDJSONParser: Sendable {
         var buffer = Data()
         var rejectedLines = 0
         var discardsUntilNewline = false
+        let decoder = JSONDecoder.forCLI()
     }
 
     private let state = Mutex(State())
@@ -31,6 +32,20 @@ public final class NDJSONParser: Sendable {
             while start < chunk.endIndex {
                 let newline = chunk[start...].firstIndex(of: 0x0A)
                 let part = chunk[start..<(newline ?? chunk.endIndex)]
+                if state.buffer.isEmpty, !state.discardsUntilNewline, let newline {
+                    if part.count > maximumLineBytes {
+                        state.rejectedLines += 1
+                    } else if !part.isEmpty {
+                        if let snapshot = try? StatusSnapshot.decode(part, using: state.decoder), snapshot.containsReadings {
+                            snapshots.append(snapshot)
+                        } else {
+                            state.rejectedLines += 1
+                        }
+                    }
+                    state.discardsUntilNewline = false
+                    start = chunk.index(after: newline)
+                    continue
+                }
                 if !state.discardsUntilNewline {
                     if part.count > maximumLineBytes - state.buffer.count {
                         state.buffer.removeAll()
@@ -42,7 +57,7 @@ public final class NDJSONParser: Sendable {
                 }
                 guard let newline else { break }
                 if !state.buffer.isEmpty {
-                    if let snapshot = try? StatusSnapshot.decode(state.buffer), snapshot.containsReadings {
+                    if let snapshot = try? StatusSnapshot.decode(state.buffer, using: state.decoder), snapshot.containsReadings {
                         snapshots.append(snapshot)
                     } else {
                         state.rejectedLines += 1

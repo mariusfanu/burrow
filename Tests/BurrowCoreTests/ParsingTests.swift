@@ -23,7 +23,11 @@ import Testing
         #expect(LogLine(id: 3, raw: "  ◎ Trash · skipped, grant Full Disk Access").kind == .note)
         #expect(LogLine(id: 4, raw: "☻ broken").kind == .failure)
         #expect(LogLine.isDecoration("======"))
+        #expect(LogLine.isDecoration("   "))
+        #expect(LogLine.isDecoration("───━━━---"))
         #expect(!LogLine.isDecoration("Potential space"))
+        #expect(LogLine(id: 5, raw: "  ○ App   0B").bytes == 0)
+        #expect(LogLine(id: 6, raw: "  ○ Big   1.5TB").bytes == 1_500_000_000_000)
     }
 
     @Test func cleanReportParsesSectionsSummaryAndPaths() {
@@ -137,6 +141,10 @@ import Testing
         // The previous row's path, still on screen just after the cursor moved.
         #expect(!MenuDriver.path("~/p/app/DerivedData", matches: item("~/p/app", tag: ".build")))
         #expect(!MenuDriver.path("~/p/other/.build", matches: item("~/p/app", tag: ".build")))
+        #expect(MenuDriver.path("~/p/app", matches: item("~/p/app", tag: nil)))
+        #expect(MenuDriver.path("~/p/app/sub", matches: item("~/p/app", tag: nil)))
+        #expect(!MenuDriver.path("~/p/app-extra", matches: item("~/p/app", tag: nil)))
+        #expect(!MenuDriver.path("~/p/app/sub", matches: item("~/p/app", tag: "other...")))
     }
 
     @Test func runSummariesReadTheClosingLine() throws {
@@ -145,6 +153,7 @@ import Testing
         #expect(!clean.isEstimate)
         #expect(RunSummary.parse(lines: ["Removed 1 app, freed 8KB: Dummy"])?.bytes == 8_000)
         #expect(RunSummary.parse(lines: ["Estimated space freed: 1.0MB | Items: 1"])?.sizeText == "1.0MB")
+        #expect(RunSummary.parse(lines: ["Estimated space freed: 1.0MB | Items: 1"])?.isEstimate == true)
         #expect(RunSummary.parse(lines: ["Would free approximately: 3.45GB | Items: 10"])?.isEstimate == true)
         #expect(RunSummary.parse(lines: ["Potential space: 1.93GB · 85 items"])?.isEstimate == true)
         #expect(RunSummary.parse(lines: ["✓ Nothing to clean"]) == nil)
@@ -156,6 +165,24 @@ import Testing
         #expect(line.title == "Google Chrome")
         #expect(line.detail == "264.3MB")
         #expect(line.bytes == 264_300_000)
+    }
+
+    @Test func menuItemStripsMultiGlyphTreePrefixAndSizeTextRespectsWordBoundaries() throws {
+        let menu = try #require(MenuParser.parse(lines: [
+            "Select Artifacts to Purge [1/1]",
+            "1.0MB, 0 selected",
+            "  ○ ├── Foo   1.0MB | dist | 5mo",
+            "↑↓ | Space Select | Enter Confirm",
+        ]))
+        let row = try #require(menu.rows.first)
+        #expect(MenuItem.parse(row: row, index: 0).name == "Foo")
+
+        #expect(SizeText.bytes(from: "v2.5GB") == nil)
+        #expect(SizeText.bytes(from: "app2024B") == nil)
+        #expect(SizeText.bytes(from: "0B") == 0)
+        #expect(SizeText.bytes(from: "2GB") == 2_000_000_000)
+        #expect(SizeText.bytes(from: "1.5TB") == 1_500_000_000_000)
+        #expect(SizeText.bytes(from: "9999999999TB") == Int64.max)
     }
 
     @Test func menuHeaderReportsPositionAndCounts() throws {
@@ -217,9 +244,35 @@ import Testing
         #expect(snapshot.cpu?.perCore?.count == 2)
         #expect(snapshot.cpu?.pCoreCount == 6)
         #expect(snapshot.batteries == nil)
+        #expect(snapshot.containsReadings)
         #expect(snapshot.rootDisk?.mount == "/")
         #expect(snapshot.totalDownload == 2.0)
+        #expect(snapshot.totalUpload == 1.0)
         #expect(snapshot.topProcesses?.first?.memoryBytes == 1024)
+
+        let empty = try StatusSnapshot.decode(Data("{}".utf8))
+        #expect(!empty.containsReadings)
+        #expect(empty.rootDisk == nil)
+        #expect(empty.totalDownload == 0)
+        #expect(empty.totalUpload == 0)
+
+        let fallback = try StatusSnapshot.decode(Data(#"{"disks":[{"mount":"/Volumes/Ext","used":1,"total":2}]}"#.utf8))
+        #expect(fallback.containsReadings)
+        #expect(fallback.rootDisk?.mount == "/Volumes/Ext")
+    }
+
+    @Test func historySessionStripsDryRunOnlyAsSuffix() {
+        let preview = HistoryReport.Session(command: "clean-dry-run")
+        #expect(preview.isPreview)
+        #expect(preview.commandName == "clean")
+
+        let middle = HistoryReport.Session(command: "custom-dry-run-tool")
+        #expect(!middle.isPreview)
+        #expect(middle.commandName == "custom-dry-run-tool")
+
+        let missing = HistoryReport.Session(command: nil)
+        #expect(!missing.isPreview)
+        #expect(missing.commandName == "unknown")
     }
 
     @Test func analyzeDecodes() throws {
@@ -333,6 +386,15 @@ import Testing
         #expect(UninstallTargeting.terms(for: [listed, missing], among: [listed]) == ["No Path", "missing-cask"])
     }
 
+    @Test func emptySelectionAndUnsafeFlagLikeNamesAreHandledSafely() throws {
+        let dashed = try app("-rf", "/Applications/SafeApp.app", uninstallName: "-unsafe")
+        #expect(UninstallTargeting.terms(for: [], among: [dashed]).isEmpty)
+        #expect(UninstallTargeting.terms(for: [dashed], among: [dashed]) == ["SafeApp"])
+
+        let allUnsafe = try app("-rf", "/Applications/-also-unsafe.app", uninstallName: "bad\u{0}name")
+        #expect(UninstallTargeting.terms(for: [allUnsafe], among: [allUnsafe]).isEmpty)
+    }
+
     @Test func duplicateIdentityDoesNotMakeAnAmbiguousWordUnique() throws {
         let listed = try app("Tool", "/Applications/Other.app")
         // Repeated selected entries retain their order; repeated matches remain ambiguous.
@@ -376,6 +438,13 @@ import Testing
         let lines = ["Files to be removed:", "◎ Old", "  ✓ /Applications/Old.app", "Files to be removed:", "◎ New", "  ✓ /Applications/New.app"]
         #expect(UninstallPlan.appPaths(in: lines, home: "/h") == ["/Applications/New.app"])
     }
+
+    @Test func appCountReadsConfirmPrompts() {
+        #expect(UninstallPlan.appCount(in: .confirm("Remove 3 apps  Enter confirm, ESC cancel:")) == 3)
+        #expect(UninstallPlan.appCount(in: .confirm("Remove 1 app, 2.0GB  Enter confirm, ESC cancel:")) == 1)
+        #expect(UninstallPlan.appCount(in: .confirm("Remove 10 apps, 1.2GB")) == 10)
+        #expect(UninstallPlan.appCount(in: .confirm("Delete everything?")) == nil)
+    }
 }
 
 struct CLIOutputKnowledgeTests {
@@ -386,6 +455,14 @@ struct CLIOutputKnowledgeTests {
         let on = try #require(TouchIDStatus(output: "✓ Touch ID is enabled\n"))
         #expect(on.description == "Touch ID is enabled")
         #expect(on.isEnabled)
+        let configured = try #require(TouchIDStatus(output: "✓ Touch ID is configured\n"))
+        #expect(configured.isEnabled)
+        let disabled = try #require(TouchIDStatus(output: "Touch ID is disabled\n"))
+        #expect(!disabled.isEnabled)
+        let unavailable = try #require(TouchIDStatus(output: "Touch ID is unavailable\n"))
+        #expect(!unavailable.isEnabled)
+        let unknownError = try #require(TouchIDStatus(output: "Error: permission denied\n"))
+        #expect(!unknownError.isEnabled)
         #expect(TouchIDStatus(output: " \n") == nil)
     }
 
@@ -416,6 +493,15 @@ struct CLIOutputKnowledgeTests {
         let recovered = parser.feed(Data("tail\n{}\n{\"unknown\":true}\n{\"host\":\"current\"}\n".utf8))
         #expect(recovered.map(\.host) == ["current"])
         #expect(parser.takeRejectedLines() == 2)
+    }
+
+    @Test func directChunkDecodingHandlesMultipleLinesAndOversizedCompleteLine() {
+        let parser = NDJSONParser(maximumLineBytes: 32)
+        let oversized = String(repeating: "x", count: 48)
+        let chunk = Data("{\"host\":\"one\"}\n\(oversized)\n{\"host\":\"two\"}\n".utf8)
+        let snapshots = parser.feed(chunk)
+        #expect(snapshots.map(\.host) == ["one", "two"])
+        #expect(parser.takeRejectedLines() == 1)
     }
 }
 

@@ -4,6 +4,7 @@ import SwiftUI
 struct OverviewHero: View {
     let cli: CLIInfo
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var disk: StatusSnapshot.Disk? { app.status.snapshot?.rootDisk }
     private var used: Int64 { max(disk?.used ?? 0, 0) }
@@ -48,7 +49,7 @@ struct OverviewHero: View {
             .accessibilityElement(children: .contain)
         }
         .frame(height: 350)
-        .animation(Motion.settle, value: total > 0)
+        .animation(Motion.settle(reduced: reduceMotion), value: total > 0)
     }
 
     private var diskCaption: String {

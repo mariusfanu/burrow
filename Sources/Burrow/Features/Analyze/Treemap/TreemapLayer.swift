@@ -7,8 +7,11 @@ struct TreemapLayer: View {
     let model: AnalyzeModel
     let cli: CLIInfo
     let isInteractive: Bool
+    @Environment(\.accentRevision) private var accentRevision
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let _ = accentRevision
         GeometryReader { proxy in
             if snapshot.isLoading, snapshot.entries.isEmpty {
                 MeasuringPlate(name: snapshot.name, tint: snapshot.tint)
@@ -19,7 +22,12 @@ struct TreemapLayer: View {
                 tiles(in: proxy.size)
             }
         }
-        .animation(Motion.isReduced ? nil : Motion.lift, value: snapshot.entries.map(\.id))
+        .animation(Motion.isReduced(reduceMotion) ? nil : Motion.lift(reduced: reduceMotion), value: AnimationKey(id: snapshot.id, count: snapshot.entries.count))
+    }
+
+    private struct AnimationKey: Equatable {
+        let id: String
+        let count: Int
     }
 
     private func tiles(in size: CGSize) -> some View {
@@ -35,12 +43,11 @@ struct TreemapLayer: View {
                         color: Theme.tile(rank: found.offset, parent: snapshot.tint),
                         rect: tile.rect,
                         container: size,
-                        isSelected: model.selection.contains(found.element.path),
                         isInteractive: isInteractive,
                         model: model,
                         cli: cli
                     )
-                    .transition(Motion.content(scale: 0.7))
+                    .transition(Motion.content(scale: 0.7, reduced: reduceMotion))
                 } else {
                     SmallItemsTile(count: map.restCount, size: map.restSize, rect: tile.rect)
                 }

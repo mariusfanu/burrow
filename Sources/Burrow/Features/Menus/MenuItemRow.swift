@@ -6,6 +6,7 @@ struct MenuItemRow: View {
     let largestBytes: Int64
     let isSelected: Bool
     let toggle: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: Theme.Space.cluster) {
@@ -32,9 +33,11 @@ struct MenuItemRow: View {
                 FactTag(text: age)
             }
             VStack(alignment: .trailing, spacing: Theme.Space.tight) {
-                Text(item.sizeText ?? "")
-                    .font(.callout)
-                    .monospacedDigit()
+                if let sizeText = item.sizeText {
+                    Text(sizeText)
+                        .font(.callout)
+                        .monospacedDigit()
+                }
                 LevelBar(part: item.bytes, of: largestBytes, height: 3)
             }
             .frame(width: 84, alignment: .trailing)
@@ -42,6 +45,9 @@ struct MenuItemRow: View {
         .padding(.vertical, 3)
         .contentShape(.rect)
         .onTapGesture(perform: toggle)
-        .animation(Motion.snap, value: isSelected)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { toggle() }
+        .animation(Motion.snap(reduced: reduceMotion), value: isSelected)
     }
 }

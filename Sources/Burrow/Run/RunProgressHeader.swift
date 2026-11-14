@@ -4,12 +4,14 @@ import SwiftUI
 /// the command really advances.
 struct RunProgressHeader: View {
     let run: RunController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.item) {
             HStack(spacing: Theme.Space.item) {
                 ProgressView()
                     .controlSize(.small)
+                    .accessibilityHidden(true)
                 Text(run.title)
                     .font(.title2)
                     .bold()
@@ -28,7 +30,7 @@ struct RunProgressHeader: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .contentTransition(.opacity)
-                .animation(Motion.snap, value: stepText)
+                .animation(Motion.snap(reduced: reduceMotion), value: stepText)
             if let progress = run.progress {
                 LevelBar(fraction: progress)
             }

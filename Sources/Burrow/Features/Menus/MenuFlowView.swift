@@ -5,13 +5,14 @@ struct MenuFlowView: View {
     let model: MenuFlowModel
     let cli: CLIInfo
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             switch model.state {
             case .idle:
                 MenuFlowIntro(model: model, cli: cli)
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
             case .scanning:
                 WorkingView(
                     title: model.configuration.scanTitle,
@@ -19,15 +20,15 @@ struct MenuFlowView: View {
                 )
             case .choosing:
                 MenuFlowList(model: model)
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
             case .applying:
                 WorkingView(title: "Applying Your Selection", detail: "Checking each row")
             case .running:
                 RunPanel(run: model.run)
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
             }
         }
-        .animation(Motion.glide, value: model.state)
+        .animation(Motion.glide(reduced: reduceMotion), value: model.state)
         .onChange(of: app.effectivePreview) { abandonIfPreviewChanged() }
         .onAppear(perform: abandonIfPreviewChanged)
     }

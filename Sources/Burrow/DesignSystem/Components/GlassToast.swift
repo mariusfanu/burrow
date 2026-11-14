@@ -7,6 +7,8 @@ struct GlassToast: View {
     var undo: (() -> Void)?
     let dismiss: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: Theme.Space.item) {
             Image(systemName: "checkmark.circle.fill")
@@ -29,6 +31,6 @@ struct GlassToast: View {
         .padding(.horizontal, Theme.Space.card)
         .padding(.vertical, 9)
         .glassEffect(.regular, in: .capsule)
-        .transition(Motion.materialize)
+        .transition(Motion.materialize(reduced: reduceMotion))
     }
 }

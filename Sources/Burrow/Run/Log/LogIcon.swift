@@ -3,6 +3,7 @@ import SwiftUI
 
 struct LogIcon: View {
     let kind: LogLine.Kind
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isDrawn = false
 
     var body: some View {
@@ -19,7 +20,7 @@ struct LogIcon: View {
         }
         .frame(width: 14, height: 12)
         .onAppear {
-            withAnimation(.easeOut(duration: Motion.isReduced ? 0 : 0.35)) { isDrawn = true }
+            withAnimation(.easeOut(duration: Motion.isReduced(reduceMotion) ? 0 : 0.35)) { isDrawn = true }
         }
     }
 

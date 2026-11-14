@@ -48,5 +48,15 @@ struct AnalyzeEntryRow: View {
         }
         .padding(.vertical, Theme.Space.micro)
         .opacity(isHovered ? 1 : 0.94)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(entry.size.fileSize)
+    }
+
+    private var accessibilityLabel: String {
+        var parts = [entry.isDir ? "Folder" : "File", entry.name]
+        if entry.cleanable == true { parts.append("Cleanable") }
+        if !canTrash { parts.append("Protected") }
+        return parts.joined(separator: ", ")
     }
 }

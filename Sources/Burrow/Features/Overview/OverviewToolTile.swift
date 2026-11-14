@@ -4,6 +4,7 @@ struct OverviewToolTile: View {
     let screen: Screen
     let fact: String
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hoverCount = 0
 
     var body: some View {
@@ -25,7 +26,7 @@ struct OverviewToolTile: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .contentTransition(.numericText())
-                            .animation(Motion.snap, value: fact)
+                            .animation(Motion.snap(reduced: reduceMotion), value: fact)
                     }
                     Spacer(minLength: 0)
                 }
@@ -35,7 +36,7 @@ struct OverviewToolTile: View {
         }
         .buttonStyle(SurfaceButtonStyle())
         .onHover(perform: hover)
-        .accessibilityHint(screen.summary)
+        .accessibilityHint(fact == screen.summary ? "" : screen.summary)
     }
 
     private func open() {
@@ -43,6 +44,6 @@ struct OverviewToolTile: View {
     }
 
     private func hover(_ inside: Bool) {
-        if inside, !Motion.isReduced { hoverCount += 1 }
+        if inside, !Motion.isReduced(reduceMotion) { hoverCount += 1 }
     }
 }

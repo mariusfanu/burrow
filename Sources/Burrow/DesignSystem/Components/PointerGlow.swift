@@ -6,13 +6,14 @@ struct PointerGlow: ViewModifier {
     var strength: Double = 0.14
     var radius: CGFloat = 170
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var location: CGPoint?
     @State private var opacity: Double = 0
 
     func body(content: Content) -> some View {
         content
             .overlay {
-                if let location, !Motion.isReduced {
+                if let location, !Motion.isReduced(reduceMotion) {
                     GeometryReader { proxy in
                         // The gradient fills the surface and centers on the pointer, so it
                         // never shows an edge of its own.
@@ -36,9 +37,9 @@ struct PointerGlow: ViewModifier {
                 switch phase {
                 case .active(let point):
                     location = point
-                    if opacity == 0 { withAnimation(Motion.snap) { opacity = 1 } }
+                    if opacity == 0 { withAnimation(Motion.snap(reduced: reduceMotion)) { opacity = 1 } }
                 case .ended:
-                    withAnimation(Motion.glide) { opacity = 0 }
+                    withAnimation(Motion.glide(reduced: reduceMotion)) { opacity = 0 }
                 }
             }
     }

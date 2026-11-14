@@ -26,13 +26,15 @@ struct PurgePathsSheet: View {
                 Text(path)
                     .font(.callout.monospaced())
             }
+            .onDeleteCommand(perform: removeSelected)
             .frame(height: 180)
             HStack {
                 Button("Add Folder…", action: addFolder)
                 Button("Remove", action: removeSelected)
                     .disabled(selection == nil)
+                    .keyboardShortcut(.delete, modifiers: [])
                 Spacer()
-                if needsReload { Button("Reload", action: load) }
+                if needsReload || original == nil { Button("Reload", action: load) }
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Save", action: save)
@@ -65,9 +67,10 @@ struct PurgePathsSheet: View {
     }
 
     private func addFolder() {
-        if let path = FilePicker.chooseFolder(prompt: "Add"), !paths.contains(path.abbreviatingHome) {
-            paths.append(path.abbreviatingHome)
-        }
+        guard let path = FilePicker.chooseFolder(prompt: "Add") else { return }
+        let normalized = (path as NSString).expandingTildeInPath
+        guard !paths.contains(where: { ($0 as NSString).expandingTildeInPath == normalized }) else { return }
+        paths.append(path.abbreviatingHome)
     }
 
     private func removeSelected() {

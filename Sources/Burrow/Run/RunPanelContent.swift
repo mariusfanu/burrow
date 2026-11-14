@@ -4,16 +4,17 @@ import SwiftUI
 struct RunPanelContent: View {
     let run: RunController
     @Binding var showsDetails: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if isFinished, !showsLogByDefault {
             CompletionHero(run: run, showsDetails: $showsDetails)
-                .transition(Motion.materialize)
+                .transition(Motion.materialize(reduced: reduceMotion))
         } else {
             VStack(spacing: 0) {
                 if isFinished {
                     CompletionBanner(run: run, showsDetails: $showsDetails)
-                        .transition(Motion.materialize)
+                        .transition(Motion.materialize(reduced: reduceMotion))
                 } else {
                     RunProgressHeader(run: run)
                         .transition(.opacity)

@@ -26,10 +26,10 @@ extension HistoryReport.Session {
         }
     }
 
-    var startedDate: Date? { startedAt.flatMap(HistoryDate.parse) }
+    @MainActor var startedDate: Date? { startedAt.flatMap { HistoryDate.parse($0) } }
 
     /// "Yesterday at 23:39", falling back to the raw text if it can't be read as a date.
-    var startedText: String {
+    @MainActor var startedText: String {
         guard let date = startedDate else { return startedAt ?? "" }
         return HistoryDate.text(for: date)
     }
@@ -41,7 +41,7 @@ extension HistoryReport.Session {
 
     /// The size column, or nothing when the session didn't free anything. A column of
     /// "0 bytes" says nothing and hides the rows that matter.
-    var sizeText: String? { bytes > 0 ? bytes.fileSize : nil }
+    @MainActor var sizeText: String? { bytes > 0 ? bytes.fileSize : nil }
 
     /// "1 item", "1,974 items", or nothing when no item was involved.
     var itemsText: AttributedString? {
@@ -67,7 +67,7 @@ extension HistoryReport.Session {
 }
 
 extension HistoryReport.Deletion {
-    var timestampText: String {
+    @MainActor var timestampText: String {
         guard let timestamp, let date = HistoryDate.parse(timestamp) else { return timestamp ?? "" }
         return HistoryDate.text(for: date)
     }

@@ -8,10 +8,13 @@ struct StrataScene: View {
     let usedFraction: Double
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accentRevision) private var accentRevision
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shownFraction = 0.0
     @State private var drift = 0.0
 
     var body: some View {
+        let _ = accentRevision
         ZStack {
             MeshGradient(
                 width: 3,
@@ -32,12 +35,17 @@ struct StrataScene: View {
 
     /// Tiny changes between samples don't move the ground. Only real ones do, in 0.2% steps.
     private var isMeaningfulChange: Int {
-        Int(usedFraction * 500)
+        Self.meaningfulStep(for: usedFraction)
+    }
+
+    static func meaningfulStep(for usedFraction: Double) -> Int {
+        guard usedFraction.isFinite else { return 0 }
+        return Int(min(max(usedFraction, 0), 1) * 500)
     }
 
     private func settle(toward fraction: Double) {
-        withAnimation(Motion.lift) { shownFraction = fraction }
-        guard !Motion.isReduced else { return }
+        withAnimation(Motion.lift(reduced: reduceMotion)) { shownFraction = fraction }
+        guard !Motion.isReduced(reduceMotion) else { return }
         withAnimation(.easeOut(duration: 3.5)) { drift += 1 }
     }
 }

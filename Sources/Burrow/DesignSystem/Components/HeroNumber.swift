@@ -7,12 +7,14 @@ struct HeroNumber: View {
     /// Drives the rolling digit transition.
     var value: Double = 0
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Text(text)
             .font(.system(size: size, weight: .semibold, design: .rounded))
             .monospacedDigit()
             .contentTransition(.numericText(value: value))
-            .animation(Motion.settle, value: value)
+            .animation(Motion.settle(reduced: reduceMotion), value: value)
             .lineLimit(1)
             .minimumScaleFactor(0.6)
     }

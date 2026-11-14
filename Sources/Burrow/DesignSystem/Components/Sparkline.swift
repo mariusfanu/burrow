@@ -9,6 +9,7 @@ struct Sparkline: View {
     var tint: Color = .accentColor
     var maximum: Double?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var scroll: Double = 0
 
     private let capacity = 45
@@ -51,7 +52,7 @@ struct Sparkline: View {
         .overlay(alignment: .bottomTrailing) { head }
         .frame(height: height)
         .onChange(of: sampleID) {
-            guard !Motion.isReduced else { return }
+            guard !Motion.isReduced(reduceMotion) else { return }
             var start = Transaction()
             start.disablesAnimations = true
             withTransaction(start) { scroll = 1 }
@@ -70,13 +71,18 @@ struct Sparkline: View {
                 .frame(width: headSize, height: headSize)
                 .background(Circle().fill(tint.opacity(0.22)).padding(-3))
                 .offset(y: headSize / 2 - level * height)
-                .animation(Motion.isReduced ? nil : .smooth(duration: 0.45), value: level)
+                .animation(Motion.isReduced(reduceMotion) ? nil : .smooth(duration: 0.45), value: level)
         }
     }
 
     /// Where the oldest drawn sample sits, as a fraction of the width.
     private var traceStart: Double {
-        let drawn = min(values.count, capacity + 1)
+        Self.traceStart(sampleCount: values.count, capacity: capacity)
+    }
+
+    static func traceStart(sampleCount: Int, capacity: Int = 45) -> Double {
+        guard sampleCount > 0 else { return 1 }
+        let drawn = min(sampleCount, capacity + 1)
         return max(1 - Double(drawn - 1) / Double(capacity - 1), 0)
     }
 

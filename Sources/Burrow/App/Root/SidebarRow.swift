@@ -9,6 +9,7 @@ struct SidebarRow: View {
     let needsAttention: Bool
     let badge: String?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectionCount = 0
 
     var body: some View {
@@ -28,7 +29,7 @@ struct SidebarRow: View {
             } else if isWorking {
                 ProgressView()
                     .controlSize(.mini)
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
                     .accessibilityLabel("Working")
             } else if let badge {
                 Text(badge)
@@ -36,13 +37,13 @@ struct SidebarRow: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
             }
         }
-        .animation(Motion.settle, value: isWorking)
-        .animation(Motion.settle, value: badge)
+        .animation(Motion.settle(reduced: reduceMotion), value: isWorking)
+        .animation(Motion.settle(reduced: reduceMotion), value: badge)
         .onChange(of: isSelected) {
-            if isSelected, !Motion.isReduced { selectionCount += 1 }
+            if isSelected, !Motion.isReduced(reduceMotion) { selectionCount += 1 }
         }
     }
 }

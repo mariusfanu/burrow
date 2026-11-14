@@ -3,6 +3,7 @@ import SwiftUI
 /// A refresh shows only its symbol and spins once when clicked. Cancel is spelled out.
 struct SecondaryToolbarButton: View {
     let action: PageAction
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var turns = 0
 
     var body: some View {
@@ -21,7 +22,7 @@ struct SecondaryToolbarButton: View {
     }
 
     private func refresh() {
-        if !Motion.isReduced { turns += 1 }
+        if !Motion.isReduced(reduceMotion) { turns += 1 }
         action.perform()
     }
 }

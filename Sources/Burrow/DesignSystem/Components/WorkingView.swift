@@ -5,6 +5,8 @@ struct WorkingView: View {
     let title: String
     var detail: String = ""
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(spacing: Theme.Space.cluster) {
             ProgressView()
@@ -18,10 +20,11 @@ struct WorkingView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .contentTransition(.opacity)
-                .animation(Motion.snap, value: detail)
+                .animation(Motion.snap(reduced: reduceMotion), value: detail)
                 .frame(maxWidth: 480)
+                .accessibilityHidden(detail.isEmpty)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .transition(Motion.materialize)
+        .transition(Motion.materialize(reduced: reduceMotion))
     }
 }

@@ -10,8 +10,10 @@ struct SparkShape: Shape {
     @AnimatableIgnored var closesArea: Bool
 
     func path(in rect: CGRect) -> Path {
-        let recent = values.suffix(capacity + 1)
-        guard recent.count > 1, maximum > 0 else { return Path() }
+        let recent = values.suffix(max(capacity, 0) + 1)
+        guard capacity > 1, recent.count > 1, maximum.isFinite, maximum > 0, scroll.isFinite else {
+            return Path()
+        }
         let step = rect.width / CGFloat(capacity - 1)
         var points: [CGPoint] = []
         points.reserveCapacity(recent.count)
@@ -19,7 +21,8 @@ struct SparkShape: Shape {
         for (index, value) in recent.enumerated() {
             let fromEnd = CGFloat(newest - index) - CGFloat(scroll)
             let x = rect.maxX - fromEnd * step
-            let y = rect.maxY - rect.height * CGFloat(min(max(value / maximum, 0), 1))
+            let normalized = value.isFinite ? min(max(value / maximum, 0), 1) : 0
+            let y = rect.maxY - rect.height * CGFloat(normalized)
             points.append(CGPoint(x: x, y: y))
         }
 

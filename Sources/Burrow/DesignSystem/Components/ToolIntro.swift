@@ -9,6 +9,7 @@ struct ToolIntro<Actions: View>: View {
     var errorMessage: String?
     @ViewBuilder var actions: Actions
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isDrawn = false
 
     var body: some View {
@@ -33,7 +34,7 @@ struct ToolIntro<Actions: View>: View {
         }
         .onAppear {
             isDrawn = false
-            withAnimation(.easeOut(duration: Motion.isReduced ? 0 : 0.9)) { isDrawn = true }
+            withAnimation(.easeOut(duration: Motion.isReduced(reduceMotion) ? 0 : 0.9)) { isDrawn = true }
         }
     }
 }

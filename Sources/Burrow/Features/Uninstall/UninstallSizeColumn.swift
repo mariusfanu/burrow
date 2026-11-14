@@ -30,10 +30,14 @@ struct UninstallSizeColumn: View {
                 Button("Retry Size", systemImage: "arrow.clockwise", action: retry)
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
+                    .disabled(model.isMeasuring)
                     .help(message)
+                    .accessibilityHint(message)
                 Text("Unavailable")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel("Size unavailable")
+                    .accessibilityHint(message)
             }
         }
         .frame(width: 92, alignment: .trailing)

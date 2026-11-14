@@ -9,7 +9,7 @@ struct HistoryDeletionRow: View {
             Image(systemName: row.mode == "trash" ? "trash" : "xmark.bin")
                 .foregroundStyle(.secondary)
                 .frame(width: 18)
-                .accessibilityLabel(row.mode ?? "")
+                .accessibilityLabel(row.mode == "trash" ? "Moved to Trash" : row.mode == nil ? "Removed" : "Removed permanently")
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.path?.abbreviatingHome ?? "")
                     .font(.body)
@@ -31,5 +31,6 @@ struct HistoryDeletionRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .accessibilityElement(children: .combine)
     }
 }

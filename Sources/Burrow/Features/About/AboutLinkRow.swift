@@ -8,6 +8,7 @@ struct AboutLinkRow: View {
     let systemImage: String
     let url: URL
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovered = false
 
     var body: some View {
@@ -38,14 +39,14 @@ struct AboutLinkRow: View {
                 Image(systemName: "arrow.up.right")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(isHovered ? Color.accentColor : .secondary)
-                    .scaleEffect(isHovered && !Motion.isReduced ? 1.08 : 1)
+                    .scaleEffect(isHovered && !Motion.isReduced(reduceMotion) ? 1.08 : 1)
                     .accessibilityHidden(true)
             }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(Motion.snap) {
+            withAnimation(Motion.snap(reduced: reduceMotion)) {
                 isHovered = hovering
             }
         }

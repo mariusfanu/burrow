@@ -26,11 +26,12 @@ struct AnalyzeView: View {
         }
         .task(id: cli) { await start() }
         .onAppear { model.undoManager = undoManager }
+        .onChange(of: undoManager) { model.undoManager = undoManager }
         .onChange(of: model.noticeMessage) { Announcer.say(model.noticeMessage) }
         .onChange(of: model.errorMessage) { Announcer.say(model.errorMessage) }
         .alert(model.pendingTrash?.title ?? "", isPresented: $model.isConfirmingTrash) {
             // Return mustn't be the way a high-risk move happens.
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) { model.cancelPendingTrash() }
                 .keyboardShortcut(.defaultAction)
             Button("Move to Trash") { model.confirmPendingTrash(cli: cli) }
         } message: {

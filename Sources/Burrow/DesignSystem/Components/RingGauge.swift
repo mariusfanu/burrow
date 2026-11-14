@@ -6,17 +6,19 @@ struct RingGauge<Label: View>: View {
     var tint: Color = .accentColor
     var lineWidth: CGFloat = 8
     @ViewBuilder var label: Label
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             Circle()
                 .stroke(.quaternary, lineWidth: lineWidth)
+            let clamped = fraction.isFinite ? min(max(fraction, 0), 1) : 0
             Circle()
-                .trim(from: 0, to: min(max(fraction, 0), 1))
+                .trim(from: 0, to: clamped)
                 .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             label
         }
-        .animation(Motion.lift, value: fraction)
+        .animation(Motion.lift(reduced: reduceMotion), value: fraction)
     }
 }

@@ -4,6 +4,7 @@ import SwiftUI
 struct HistoryView: View {
     @Bindable var model: HistoryModel
     let cli: CLIInfo
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,14 +19,14 @@ struct HistoryView: View {
             if model.report == nil, model.errorMessage != nil {
                 ContentUnavailableView("History Couldn’t Be Loaded", systemImage: "exclamationmark.triangle")
             } else if model.showsFiles {
-                HistoryFiles(rows: model.report?.deletions ?? [])
+                HistoryFiles(rows: model.report?.deletions ?? [], isLoading: model.isLoading && model.report == nil)
                     .transition(.opacity)
             } else {
                 HistorySessions(model: model)
                     .transition(.opacity)
             }
         }
-        .animation(Motion.snap, value: model.showsFiles)
+        .animation(Motion.snap(reduced: reduceMotion), value: model.showsFiles)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("View", selection: $model.showsFiles) {

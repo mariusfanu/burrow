@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CoreBars: View {
     let values: [Double]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 3) {
@@ -12,7 +13,7 @@ struct CoreBars: View {
             }
         }
         .frame(height: 22, alignment: .bottom)
-        .animation(Motion.snap, value: values)
+        .animation(Motion.snap(reduced: reduceMotion), value: values)
         .accessibilityHidden(true)
     }
 }

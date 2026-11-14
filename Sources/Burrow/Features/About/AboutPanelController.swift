@@ -11,7 +11,6 @@ final class AboutPanelController {
 
     func show() {
         if let window {
-            window.center()
             window.makeKeyAndOrderFront(nil)
             NSApp.activate()
             return

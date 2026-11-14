@@ -4,6 +4,7 @@ struct RateTile: View {
     let label: String
     let symbol: String
     let rate: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let bytes = bytesPerSecond(rate)
@@ -17,7 +18,7 @@ struct RateTile: View {
                 .font(.system(size: 19, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .contentTransition(bytes == nil ? .opacity : .numericText(value: rate))
-                .animation(Motion.snap, value: formatted)
+                .animation(Motion.snap(reduced: reduceMotion), value: formatted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }

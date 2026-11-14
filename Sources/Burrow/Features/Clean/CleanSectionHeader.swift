@@ -5,6 +5,7 @@ struct CleanSectionHeader: View {
     let section: CleanReport.Section
     let largestBytes: Int64
     @Binding var isExpanded: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: toggle) {
@@ -16,7 +17,7 @@ struct CleanSectionHeader: View {
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .transaction { transaction in
-                            if Motion.isReduced { transaction.animation = nil }
+                            if Motion.isReduced(reduceMotion) { transaction.animation = nil }
                         }
                         .frame(width: 12)
                         .accessibilityHidden(true)
@@ -55,7 +56,7 @@ struct CleanSectionHeader: View {
     }
 
     private func toggle() {
-        withAnimation(Motion.glide) { isExpanded.toggle() }
+        withAnimation(Motion.glide(reduced: reduceMotion)) { isExpanded.toggle() }
     }
 
     private static func symbol(for name: String) -> String {

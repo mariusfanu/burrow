@@ -5,6 +5,7 @@ import SwiftUI
 struct CompletionHero: View {
     let run: RunController
     @Binding var showsDetails: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var shownBytes = 0.0
     @State private var isDrawn = false
@@ -25,7 +26,7 @@ struct CompletionHero: View {
                 Image(systemName: run.completionSymbol)
                     .font(.system(size: 54, weight: .medium))
                     .foregroundStyle(run.completionTint)
-                    .symbolEffect(.drawOn, isActive: !isDrawn && !Motion.isReduced)
+                    .symbolEffect(.drawOn, isActive: !isDrawn && !Motion.isReduced(reduceMotion))
                     .symbolEffect(.bounce, options: .speed(1.2), value: landings)
                     .accessibilityHidden(true)
             }
@@ -59,7 +60,7 @@ struct CompletionHero: View {
 
     private func celebrate() {
         let bytes = Double(run.summary?.bytes ?? 0)
-        guard !Motion.isReduced else {
+        guard !Motion.isReduced(reduceMotion) else {
             shownBytes = bytes
             isDrawn = true
             return

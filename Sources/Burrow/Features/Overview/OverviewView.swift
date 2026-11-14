@@ -6,6 +6,7 @@ import SwiftUI
 struct OverviewView: View {
     let cli: CLIInfo
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Nine tools sit best as three rows of three. Narrower windows step down instead of
     /// leaving one tile alone on the last row.
@@ -32,7 +33,7 @@ struct OverviewView: View {
                         default: 1
                         }
                     } action: { count in
-                        withAnimation(Motion.glide) { columnCount = count }
+                        withAnimation(Motion.glide(reduced: reduceMotion)) { columnCount = count }
                     }
                     OverviewRecentActivity(sessions: recentSessions)
                 }
@@ -77,7 +78,7 @@ struct OverviewView: View {
     }
 
     private func percent(_ value: Double?) -> String {
-        guard let percent = Int(exactly: (value ?? 0).rounded(.towardZero)) else { return "—" }
+        guard let value, let percent = Int(exactly: value.rounded(.towardZero)) else { return "—" }
         return "\(percent)%"
     }
 }

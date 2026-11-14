@@ -22,7 +22,7 @@ struct AnalyzeNotices: View {
     }
 
     private var undoAction: (() -> Void)? {
-        guard model.lastTrashed != nil else { return nil }
+        guard model.noticeShowsUndo, model.lastTrashed != nil else { return nil }
         return { model.undoTrash(cli: cli) }
     }
 }

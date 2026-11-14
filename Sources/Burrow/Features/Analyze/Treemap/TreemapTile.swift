@@ -7,15 +7,17 @@ struct TreemapTile: View {
     let color: UInt32
     let rect: CGRect
     let container: CGSize
-    let isSelected: Bool
     let isInteractive: Bool
     let model: AnalyzeModel
     let cli: CLIInfo
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hasArrived = false
 
-    /// Read here, not in the map, so that moving the pointer doesn't lay out every tile again.
+    /// Read here, not in the map, so that moving the pointer or changing selection
+    /// doesn't lay out every tile again.
     private var isHovered: Bool { model.hovered == entry.path }
+    private var isSelected: Bool { model.selection.contains(entry.path) }
 
     private var accessibilityDescription: String {
         let base = "\(entry.name), \(entry.size.fileSize)"
@@ -46,7 +48,7 @@ struct TreemapTile: View {
             .accessibilityLabel(accessibilityDescription)
             .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction { select(extending: false) }
-            .accessibilityAction(named: "Open", open)
+            .accessibilityAction(named: entry.isDir ? "Open" : "Show in Finder", open)
             .contextMenu {
                 Button(entry.isDir ? "Open" : "Show in Finder", action: open)
                 if entry.isDir {
@@ -56,12 +58,12 @@ struct TreemapTile: View {
                     .disabled(!model.canTrash(entry))
             }
             .offset(x: rect.minX + 1.5, y: rect.minY + 1.5)
-            .animation(Motion.snap, value: isSelected)
+            .animation(Motion.snap(reduced: reduceMotion), value: isSelected)
             .onAppear(perform: arrive)
     }
 
     private var arrivalScale: CGFloat {
-        guard isInteractive, !hasArrived, !Motion.isReduced else { return 1 }
+        guard isInteractive, !hasArrived, !Motion.isReduced(reduceMotion) else { return 1 }
         return 0.94
     }
 
@@ -80,7 +82,7 @@ struct TreemapTile: View {
 
     private func arrive() {
         guard isInteractive, !hasArrived else { return }
-        withAnimation(Motion.settle.delay(Motion.stagger(rank, step: 0.016))) {
+        withAnimation(Motion.settle(reduced: reduceMotion).delay(Motion.stagger(rank, step: 0.016, reduced: reduceMotion))) {
             hasArrived = true
         }
     }

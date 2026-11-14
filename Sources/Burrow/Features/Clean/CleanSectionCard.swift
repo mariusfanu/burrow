@@ -8,6 +8,7 @@ struct CleanSectionCard: View {
     @Bindable var model: CleanModel
     let cli: CLIInfo
     let isEditable: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Surface(padding: 0) {
@@ -18,7 +19,7 @@ struct CleanSectionCard: View {
                     Divider()
                     CleanSectionDetails(section: section, isEditable: isEditable,
                                         protected: model.protectedThisSession, protect: protect)
-                        .transition(Motion.content(y: -6))
+                        .transition(Motion.content(y: -6, reduced: reduceMotion))
                 }
             }
         }
@@ -26,6 +27,6 @@ struct CleanSectionCard: View {
     }
 
     private func protect(_ path: String) {
-        withAnimation(Motion.snap) { model.protect(path: path, cli: cli) }
+        withAnimation(Motion.snap(reduced: reduceMotion)) { model.protect(path: path, cli: cli) }
     }
 }

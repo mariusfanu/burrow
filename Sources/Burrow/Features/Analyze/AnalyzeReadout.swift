@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AnalyzeReadout: View {
     let model: AnalyzeModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var hoveredEntry: AnalyzeResult.Entry? {
         model.entries.first { $0.path == model.hovered }
@@ -31,9 +32,10 @@ struct AnalyzeReadout: View {
             if model.result?.isPartial == true {
                 FactTag(text: "Partial Scan", tint: .orange)
                     .help("Some folders took too long and weren’t measured")
+                    .accessibilityHint("Some folders took too long and weren’t measured")
             }
         }
         .font(.callout)
-        .animation(Motion.snap, value: model.hovered)
+        .animation(Motion.snap(reduced: reduceMotion), value: model.hovered)
     }
 }

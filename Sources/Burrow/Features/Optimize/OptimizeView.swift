@@ -4,6 +4,7 @@ import SwiftUI
 struct OptimizeView: View {
     @Bindable var model: OptimizeModel
     let cli: CLIInfo
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -20,7 +21,7 @@ struct OptimizeView: View {
                         .controlSize(.large)
                         .keyboardShortcut(.defaultAction)
                 }
-                .transition(Motion.materialize)
+                .transition(Motion.materialize(reduced: reduceMotion))
             case .previewing:
                 WorkingView(title: "Checking This Mac", detail: model.activity)
             case .review:
@@ -32,13 +33,13 @@ struct OptimizeView: View {
                     }
                     OptimizePlan(lines: model.lines)
                 }
-                .transition(Motion.materialize)
+                .transition(Motion.materialize(reduced: reduceMotion))
             case .running:
                 RunPanel(run: model.run)
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
             }
         }
-        .animation(Motion.glide, value: model.state)
+        .animation(Motion.glide(reduced: reduceMotion), value: model.state)
         .alert("Run Maintenance Now?", isPresented: $model.isConfirming) {
             Button("Cancel", role: .cancel) {}
             Button("Run", action: run)

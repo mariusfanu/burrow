@@ -14,7 +14,11 @@ enum Theme {
         }
         #endif
         guard let color = NSColor.controlAccentColor.usingColorSpace(.sRGB) else { return 0x007AFF }
-        func byte(_ component: CGFloat) -> UInt32 { UInt32((component * 255).rounded()) }
+        func byte(_ component: CGFloat) -> UInt32 {
+            guard component.isFinite else { return 0 }
+            let clamped = min(max(component, 0), 1)
+            return UInt32((clamped * 255).rounded())
+        }
         return byte(color.redComponent) << 16 | byte(color.greenComponent) << 8 | byte(color.blueComponent)
     }
 
@@ -61,4 +65,10 @@ enum Theme {
         static let tight: CGFloat = 4
         static let micro: CGFloat = 2
     }
+}
+
+extension EnvironmentValues {
+    /// Incremented when system colors change so views using derived `Theme` colors refresh
+    /// without changing their view identity.
+    @Entry var accentRevision = 0
 }

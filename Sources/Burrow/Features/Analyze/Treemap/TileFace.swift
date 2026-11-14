@@ -11,6 +11,7 @@ struct TileFace: View {
     var isSelected = false
 
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Small tiles get smaller corners, so a sliver stays a rectangle instead of becoming a
     /// pill or a dot.
@@ -37,7 +38,7 @@ struct TileFace: View {
                     .font(.title3)
                     .foregroundStyle(.white, Color(hex: color))
                     .padding(5)
-                    .transition(Motion.content(scale: 0.3))
+                    .transition(Motion.content(scale: 0.3, reduced: reduceMotion))
                     .accessibilityHidden(true)
             }
         }
@@ -46,6 +47,6 @@ struct TileFace: View {
                 .strokeBorder(.white.opacity(isSelected ? 0.95 : 0), lineWidth: 2.5)
         }
         .clipShape(.rect(cornerRadius: radius))
-        .animation(Motion.snap, value: isHovered)
+        .animation(Motion.snap(reduced: reduceMotion), value: isHovered)
     }
 }

@@ -13,6 +13,9 @@ struct SmallItemsTile: View {
         }
         .frame(width: max(rect.width - 3, 0), height: max(rect.height - 3, 0))
         .help("See these in the list")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(count) smaller items, \(size.fileSize)")
+        .accessibilityHint("See these in the list")
         .offset(x: rect.minX + 1.5, y: rect.minY + 1.5)
     }
 }

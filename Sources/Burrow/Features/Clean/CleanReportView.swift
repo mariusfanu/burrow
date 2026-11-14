@@ -5,6 +5,7 @@ struct CleanReportView: View {
     @Bindable var model: CleanModel
     let cli: CLIInfo
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var groups: [CleanReport.Section] {
         model.report.sections.filter { !$0.isEmpty }
@@ -37,7 +38,7 @@ struct CleanReportView: View {
                         cli: cli,
                         isEditable: model.state == .review && !app.effectivePreview
                     )
-                    .transition(Motion.rise)
+                    .transition(Motion.rise(reduced: reduceMotion))
                 }
                 if !empties.isEmpty, model.state == .review {
                     Text("Nothing to clean in \(empties.map(\.name).formatted(.list(type: .and))).")

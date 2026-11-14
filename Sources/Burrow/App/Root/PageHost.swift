@@ -5,13 +5,14 @@ import SwiftUI
 /// Shows the current page and carries the transition between pages.
 struct PageHost: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Bumps when the system accent changes, so that derived colors follow it.
     @State private var accentRevision = 0
     /// The CLI version whose compatibility note has been dismissed.
-    @AppStorage("dismissedCLINotice") private var dismissedNoticeVersion = ""
+    @AppStorage("dismissedCLINotice") private var dismissedNoticeVersion: String?
 
     private var compatibilityNotice: String? {
-        guard let cli = model.cli, cli.version != dismissedNoticeVersion else { return nil }
+        guard let cli = model.cli, dismissedNoticeVersion != cli.version else { return nil }
         return CLICompatibility(version: cli.version).warning(version: cli.version)
     }
 
@@ -22,8 +23,9 @@ struct PageHost: View {
                     WorkingView(title: "Looking for the Mole CLI")
                 } else if let cli = model.cli {
                     PageContent(screen: model.selection, cli: cli)
-                        .id("\(model.selection.rawValue)-\(accentRevision)")
-                        .transition(Motion.page(movingDown: model.movedDown))
+                        .id(model.selection.rawValue)
+                        .environment(\.accentRevision, accentRevision)
+                        .transition(Motion.page(movingDown: model.movedDown, reduced: reduceMotion))
                 } else {
                     MissingCLIView()
                 }
@@ -34,7 +36,7 @@ struct PageHost: View {
                 NoticeBar(text: notice) { dismissedNoticeVersion = model.cli?.version ?? "" }
             }
         }
-        .animation(Motion.glide, value: model.selection)
+        .animation(Motion.glide(reduced: reduceMotion), value: model.selection)
         .onReceive(NotificationCenter.default.publisher(for: NSColor.systemColorsDidChangeNotification)) { _ in
             accentRevision += 1
         }

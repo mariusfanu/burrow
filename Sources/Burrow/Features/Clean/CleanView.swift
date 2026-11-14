@@ -7,22 +7,23 @@ struct CleanView: View {
     @Bindable var model: CleanModel
     let cli: CLIInfo
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             switch model.state {
             case .idle:
                 CleanIntro(model: model, cli: cli)
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
             case .scanning, .review:
                 CleanReportView(model: model, cli: cli)
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
             case .running:
                 RunPanel(run: model.run)
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
             }
         }
-        .animation(Motion.glide, value: model.state)
+        .animation(Motion.glide(reduced: reduceMotion), value: model.state)
         .onChange(of: model.state) { _, state in
             if state == .review { Announcer.say("Scan finished. \(model.summaryLine).") }
         }

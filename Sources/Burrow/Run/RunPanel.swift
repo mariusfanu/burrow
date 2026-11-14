@@ -8,6 +8,7 @@ struct RunPanel: View {
     var isSheet = false
     var close: (() -> Void)?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsDetails = false
 
     var body: some View {
@@ -16,7 +17,7 @@ struct RunPanel: View {
                 TerminalPanel(terminal: terminal, revision: run.screenRevision, run: run)
                     .clipShape(.rect(cornerRadius: Theme.Radius.card))
                     .padding(Theme.Space.item)
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
             } else {
                 RunPanelContent(run: run, showsDetails: $showsDetails)
             }
@@ -24,8 +25,8 @@ struct RunPanel: View {
                 RunSheetControls(run: run, close: close)
             }
         }
-        .animation(Motion.glide, value: run.isTerminalVisible)
-        .animation(Motion.glide, value: showsDetails)
+        .animation(Motion.glide(reduced: reduceMotion), value: run.isTerminalVisible)
+        .animation(Motion.glide(reduced: reduceMotion), value: showsDetails)
         .toolbar {
             if !isSheet {
                 ToolbarItem(placement: .automatic) {
@@ -38,5 +39,6 @@ struct RunPanel: View {
         }
         .sensoryFeedback(.levelChange, trigger: run.didSucceed) { _, succeeded in succeeded }
         .onChange(of: run.phase) { Announcer.say(run.completionAnnouncement) }
+        .onChange(of: run.startDate) { showsDetails = false }
     }
 }

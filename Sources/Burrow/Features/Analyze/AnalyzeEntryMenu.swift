@@ -7,13 +7,13 @@ struct AnalyzeEntryMenu: View {
     let cli: CLIInfo
 
     var body: some View {
-        if let path = paths.first {
+        if paths.count == 1, let path = paths.first {
             Button("Show in Finder") { FilePicker.reveal(path) }
         }
         Button(model.needsConfirmation(toTrash: paths) ? "Move to Trash…" : "Move to Trash") {
             model.selection = paths
             model.trashSelection(cli: cli)
         }
-        .disabled(paths.isEmpty || !model.entries.filter { paths.contains($0.path) }.allSatisfy(model.canTrash))
+        .disabled(!model.canTrash(paths: paths))
     }
 }

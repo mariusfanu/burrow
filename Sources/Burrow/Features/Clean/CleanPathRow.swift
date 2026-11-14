@@ -8,6 +8,7 @@ struct CleanPathRow: View {
     let isEditable: Bool
     let protect: (String) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovered = false
 
     var body: some View {
@@ -16,7 +17,7 @@ struct CleanPathRow: View {
                 Image(systemName: "lock.fill")
                     .font(.caption)
                     .foregroundStyle(.blue)
-                    .symbolEffect(.bounce, options: .nonRepeating)
+                    .symbolEffect(.bounce, options: .nonRepeating, value: Motion.isReduced(reduceMotion) ? false : isProtected)
                     .accessibilityLabel("Protected")
             }
             Text(entry.path.abbreviatingHome)
@@ -34,6 +35,7 @@ struct CleanPathRow: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
                     .opacity(isHovered ? 1 : 0.35)
+                    .accessibilityLabel("Protect \(entry.path.lastPathComponent)")
                     .help("Keep cleanup away from this path from now on")
             }
             Text(entry.sizeText)
@@ -43,7 +45,7 @@ struct CleanPathRow: View {
         }
         .frame(minHeight: 20)
         .onHover { isHovered = $0 }
-        .animation(Motion.snap, value: isHovered)
+        .animation(Motion.snap(reduced: reduceMotion), value: isHovered)
         .contextMenu {
             Button("Show in Finder", action: reveal)
             Button("Always Protect This", action: protectEntry)

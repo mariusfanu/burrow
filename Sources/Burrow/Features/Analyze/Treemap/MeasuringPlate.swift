@@ -4,6 +4,7 @@ import SwiftUI
 struct MeasuringPlate: View {
     let name: String
     let tint: UInt32?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -12,7 +13,7 @@ struct MeasuringPlate: View {
             RoundedRectangle(cornerRadius: Theme.Radius.tile)
                 .fill(.black.opacity(0.08))
                 .phaseAnimator([false, true]) { view, isBright in
-                    view.opacity(Motion.isReduced ? 0.5 : (isBright ? 1 : 0.1))
+                    view.opacity(Motion.isReduced(reduceMotion) ? 0.5 : (isBright ? 1 : 0.1))
                 } animation: { _ in
                     .easeInOut(duration: 1.1)
                 }

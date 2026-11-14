@@ -5,6 +5,7 @@ struct LevelBar: View {
     let fraction: Double
     var tint: Color = .accentColor
     var height: CGFloat = 6
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { proxy in
@@ -17,11 +18,12 @@ struct LevelBar: View {
                 }
         }
         .frame(height: height)
-        .animation(Motion.lift, value: fraction)
+        .animation(Motion.lift(reduced: reduceMotion), value: fraction)
         .accessibilityHidden(true)
     }
 
     private func fillWidth(in width: CGFloat) -> CGFloat {
+        guard fraction.isFinite, width.isFinite, width > 0 else { return 0 }
         let clamped = min(max(fraction, 0), 1)
         return clamped > 0 ? max(width * clamped, height) : 0
     }

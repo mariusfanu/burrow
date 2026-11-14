@@ -3,9 +3,12 @@ import SwiftUI
 
 struct HistoryFiles: View {
     let rows: [HistoryReport.Deletion]
+    var isLoading = false
 
     var body: some View {
-        if rows.isEmpty {
+        if isLoading {
+            WorkingView(title: "Reading the Logs")
+        } else if rows.isEmpty {
             ContentUnavailableView(
                 "No Files Recorded",
                 systemImage: "doc",

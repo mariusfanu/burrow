@@ -4,6 +4,7 @@ import SwiftUI
 struct UninstallOptionsMenu: View {
     @Bindable var model: UninstallModel
     let isPreview: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Menu("Options", systemImage: "line.3.horizontal.decrease") {
@@ -27,6 +28,6 @@ struct UninstallOptionsMenu: View {
     }
 
     private func deselectAll() {
-        withAnimation(Motion.snap) { model.selection = [] }
+        withAnimation(Motion.snap(reduced: reduceMotion)) { model.selection = [] }
     }
 }

@@ -1,6 +1,7 @@
 import Foundation
 
 /// Reads the CLI's timestamps and writes them the way the Finder does.
+@MainActor
 enum HistoryDate {
     // Formatters are safe to share once configured, and these are never changed again.
     private static let parsers: [DateFormatter] = [

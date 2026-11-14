@@ -3,6 +3,7 @@ import SwiftUI
 
 struct HistorySessions: View {
     let model: HistoryModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var visibleSessions: [HistoryReport.Session] {
         (model.report?.sessions ?? []).filter { session in
@@ -41,7 +42,7 @@ struct HistorySessions: View {
                                 .arrives(index: index + 1)
                         }
                     }
-                    .animation(Motion.settle, value: sessions.map(\.id))
+                    .animation(Motion.settle(reduced: reduceMotion), value: sessions.map(\.id))
                 }
                 .padding(Theme.Space.page)
             }

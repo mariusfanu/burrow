@@ -5,8 +5,11 @@ import SwiftUI
 struct AnalyzeEntryList: View {
     @Bindable var model: AnalyzeModel
     let cli: CLIInfo
+    @Environment(\.accentRevision) private var accentRevision
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let _ = accentRevision
         List(selection: $model.selection) {
             ForEach(model.entries.enumerated(), id: \.element.id) { rank, entry in
                 AnalyzeEntryRow(
@@ -22,7 +25,7 @@ struct AnalyzeEntryList: View {
         }
         .listStyle(.inset)
         .scrollContentBackground(.hidden)
-        .animation(Motion.lift, value: model.entries)
+        .animation(Motion.lift(reduced: reduceMotion), value: model.entries)
         .onChange(of: model.selection) { old, new in model.noteSelection(added: new.subtracting(old)) }
         .contextMenu(forSelectionType: String.self) { paths in
             AnalyzeEntryMenu(paths: paths, model: model, cli: cli)
@@ -37,8 +40,7 @@ struct AnalyzeEntryList: View {
     }
 
     private func open(_ paths: Set<String>) {
-        guard let path = paths.first,
-              let rank = model.entries.firstIndex(where: { $0.path == path }) else { return }
+        guard let rank = model.entries.firstIndex(where: { paths.contains($0.path) }) else { return }
         let entry = model.entries[rank]
         if entry.isDir {
             let tint = Theme.tile(rank: rank, parent: model.current?.tint)

@@ -8,8 +8,10 @@ struct TreemapStage: View {
     let model: AnalyzeModel
     let cli: CLIInfo
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var outgoing: MapSnapshot?
     @State private var progress: CGFloat = 1
+    @State private var zoomID = UUID()
 
     var body: some View {
         GeometryReader { proxy in
@@ -66,7 +68,9 @@ struct TreemapStage: View {
     }
 
     private func startZoom(from old: MapSnapshot) {
-        guard !Motion.isReduced else { return }
+        guard !Motion.isReduced(reduceMotion) else { return }
+        let id = UUID()
+        zoomID = id
         var start = Transaction()
         start.disablesAnimations = true
         withTransaction(start) {
@@ -76,7 +80,7 @@ struct TreemapStage: View {
         withAnimation(.spring(duration: 0.6, bounce: 0.03)) {
             progress = 1
         } completion: {
-            outgoing = nil
+            if zoomID == id { outgoing = nil }
         }
     }
 }

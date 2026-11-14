@@ -4,6 +4,7 @@ import SwiftUI
 struct UninstallView: View {
     let model: UninstallModel
     let cli: CLIInfo
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -19,18 +20,18 @@ struct UninstallView: View {
                         .controlSize(.large)
                         .keyboardShortcut(.defaultAction)
                 }
-                .transition(Motion.materialize)
+                .transition(Motion.materialize(reduced: reduceMotion))
             case .loading:
                 WorkingView(title: "Listing Installed Apps")
             case .list:
                 UninstallList(model: model)
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
             case .running:
                 RunPanel(run: model.run)
-                    .transition(Motion.materialize)
+                    .transition(Motion.materialize(reduced: reduceMotion))
             }
         }
-        .animation(Motion.glide, value: model.state)
+        .animation(Motion.glide(reduced: reduceMotion), value: model.state)
         .task(id: cli) { await loadIfNeeded() }
     }
 

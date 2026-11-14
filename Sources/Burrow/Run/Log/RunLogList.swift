@@ -3,6 +3,7 @@ import SwiftUI
 /// The running log. New lines rise in, and the list follows them unless you scroll away.
 struct RunLogList: View {
     let run: RunController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var follow = LogFollowState()
 
     private static let bottomID = "run-log-bottom"
@@ -16,7 +17,7 @@ struct RunLogList: View {
                     }
                     ForEach(run.lines) { line in
                         LogRow(line: line)
-                            .transition(Motion.rise)
+                            .transition(Motion.rise(reduced: reduceMotion))
                     }
                     if case .failedToStart(let message) = run.phase {
                         InlineNotice(text: message, symbol: "xmark.octagon.fill", tint: .red)
@@ -50,7 +51,7 @@ struct RunLogList: View {
                 if !follow.isFollowing {
                     Button("Jump to Latest", systemImage: "arrow.down") {
                         follow.jumpToLatest()
-                        withAnimation(Motion.glide) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                        withAnimation(Motion.glide(reduced: reduceMotion)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
                     }
                     .buttonStyle(.glass)
                     .padding(Theme.Space.item)
@@ -58,10 +59,10 @@ struct RunLogList: View {
             }
             .onChange(of: run.lines.last?.id) {
                 guard follow.isFollowing else { return }
-                withAnimation(Motion.glide) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                withAnimation(Motion.glide(reduced: reduceMotion)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }
             .onChange(of: run.startDate) { follow = LogFollowState() }
-            .task {
+            .task(id: run.startDate) {
                 // Returning mid-run: once row heights are real, land exactly on the latest row.
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else { return }

@@ -3,8 +3,10 @@ import SwiftUI
 /// A small dot that pulses when a sample actually arrives, so it means "this is fresh".
 struct StatusLiveDot: View {
     let sampleID: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let reduced = Motion.isReduced(reduceMotion)
         Circle()
             .fill(.green)
             .frame(width: 7, height: 7)
@@ -18,10 +20,10 @@ struct StatusLiveDot: View {
             } keyframes: { _ in
                 KeyframeTrack(\.scale) {
                     LinearKeyframe(1, duration: 0.01)
-                    CubicKeyframe(Motion.isReduced ? 1 : 2.6, duration: 0.9)
+                    CubicKeyframe(reduced ? 1 : 2.6, duration: 0.9)
                 }
                 KeyframeTrack(\.ring) {
-                    LinearKeyframe(Motion.isReduced ? 0 : 0.7, duration: 0.01)
+                    LinearKeyframe(reduced ? 0 : 0.7, duration: 0.01)
                     CubicKeyframe(0, duration: 0.9)
                 }
             }

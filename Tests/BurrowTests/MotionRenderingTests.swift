@@ -31,4 +31,16 @@ struct MotionRenderingTests {
             .frame(width: 80, height: 60)
         #expect(try pixels(standard) != fade)
     }
+
+    @Test func liveReduceMotionOverloadsHonorEnvironmentFlag() {
+        #expect(Motion.isReduced(true))
+        #expect(Motion.stagger(5, reduced: true) == 0)
+        // Verify reduced/standard overloads for content and page construct cleanly.
+        _ = Motion.content(scale: 0.96, y: 4, reduced: true)
+        _ = Motion.content(scale: 0.96, y: 4, reduced: false)
+        _ = Motion.page(movingDown: true, reduced: true)
+        _ = Motion.page(movingDown: false, reduced: false)
+        _ = Motion.snap(reduced: true)
+        _ = Motion.glide(reduced: false)
+    }
 }

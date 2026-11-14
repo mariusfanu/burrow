@@ -15,7 +15,7 @@ struct YesNoPromptContent: View {
                 .keyboardShortcut(.cancelAction)
             Button("Yes", action: acceptAnswer)
                 .buttonStyle(.glassProminent)
-                .keyboardShortcut(.defaultAction)
+                .keyboardShortcut((run.isPreview || !run.isIrreversible) ? .defaultAction : nil)
         }
     }
 

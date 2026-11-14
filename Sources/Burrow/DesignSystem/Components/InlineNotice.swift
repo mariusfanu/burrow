@@ -7,6 +7,8 @@ struct InlineNotice: View {
     var tint: Color = .orange
     var dismiss: (() -> Void)?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Space.row) {
             Image(systemName: symbol)
@@ -27,6 +29,6 @@ struct InlineNotice: View {
         .padding(.horizontal, Theme.Space.cluster)
         .padding(.vertical, Theme.Space.row)
         .background(tint.opacity(0.12), in: .rect(cornerRadius: Theme.Radius.notice))
-        .transition(Motion.rise)
+        .transition(Motion.rise(reduced: reduceMotion))
     }
 }

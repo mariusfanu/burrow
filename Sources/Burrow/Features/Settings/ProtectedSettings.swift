@@ -4,6 +4,7 @@ import SwiftUI
 /// The paths cleanup must leave alone.
 struct ProtectedSettings: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var model = ProtectedPathsModel()
     @State private var newPattern = ""
     @State private var selection: String?
@@ -26,9 +27,10 @@ struct ProtectedSettings: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(pattern)
-                    .transition(Motion.rise)
+                    .transition(Motion.rise(reduced: reduceMotion))
             }
-            .animation(Motion.settle, value: model.patterns)
+            .animation(Motion.settle(reduced: reduceMotion), value: model.patterns)
+            .onDeleteCommand(perform: removeSelected)
             .frame(maxHeight: .infinity)
             HStack {
                 TextField("Add a path or pattern", text: $newPattern)
@@ -40,12 +42,13 @@ struct ProtectedSettings: View {
                 Button("Choose…", action: chooseFolder)
                 Button("Remove", action: removeSelected)
                     .disabled(selection == nil)
+                    .keyboardShortcut(.delete, modifiers: [])
             }
             .disabled(!canEdit)
         }
         .padding(Theme.Space.page)
-        .animation(Motion.settle, value: model.errorMessage)
-        .onAppear { model.load(from: store) }
+        .animation(Motion.settle(reduced: reduceMotion), value: model.errorMessage)
+        .task(id: app.cli?.root) { model.load(from: store) }
     }
 
     private var explanation: String {
